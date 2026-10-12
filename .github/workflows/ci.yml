@@ -50,6 +50,21 @@ jobs:
   test:
     name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # a throwaway database created by this job; the tests rebuild its schema
+      TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres
     strategy:
       fail-fast: false
       matrix:

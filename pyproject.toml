@@ -15,6 +15,7 @@ dependencies = [
     "yamllint>=1.35",
     "httpx>=0.27",
     "pydantic-settings>=2.2",
+    "psycopg[binary]>=3.1",
     "uvicorn>=0.29",
 ]
 
@@ -56,10 +57,12 @@ select = [
     "RUF",
 ]
 
+# ruff format wraps code at line-length; E501 would only flag the comments, docstrings and strings it
+# cannot split (prompt text, user-facing wording), which is noise.
+ignore = ["E501"]
+
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "E501"]  # assert and long strings are fine in tests
-"src/campaign_agent/extractor/prompts.py" = ["E501"]  # prompt text: wrapping would change it
-"src/campaign_agent/questions/builder.py" = ["E501"]  # wording shown to the user
+"tests/**" = ["S101", "PT018"]  # plain and compound asserts are fine in tests
 
 [tool.ruff.format]
 quote-style = "double"
@@ -79,7 +82,7 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 addopts = "-ra --strict-markers --strict-config"
 markers = [
-    "integration: needs a database or other external service",
+    "integration: needs a database (TEST_DATABASE_URL) or other external service",
     "e2e: end to end, needs the Marketing Agent loader",
 ]
 
