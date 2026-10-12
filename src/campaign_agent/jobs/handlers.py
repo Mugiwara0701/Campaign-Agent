@@ -8,6 +8,7 @@ Every request runs the conversation to a resting state: questions to answer, a c
 validation failure to fix, or the model being unavailable.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -15,7 +16,7 @@ from pydantic import ValidationError
 
 from campaign_agent.compiler.build import Candidate, build_candidate, validate_overlay_text
 from campaign_agent.compiler.compiler import NotApplied, compile_overlay
-from campaign_agent.contract.model import LeadgenFile
+from campaign_agent.contract.model import CONFIG_VERSION, LeadgenFile
 from campaign_agent.conversation.state import ConversationState
 from campaign_agent.conversation.state_machine import (
     Event,
@@ -29,6 +30,7 @@ from campaign_agent.guard.input_guard import looks_like_secret
 from campaign_agent.ir.models import CampaignIR, new_ir
 from campaign_agent.ir.patch import IRPatch, PatchOp
 from campaign_agent.jobs.requests import ErrorCode, Request, RequestError
+from campaign_agent.ma_status import MaStatus
 from campaign_agent.merger.patch_merger import (
     MergeResult,
     Reason,
@@ -43,6 +45,7 @@ from campaign_agent.merger.patch_merger import (
 )
 from campaign_agent.questions.builder import answer_question
 from campaign_agent.questions.models import Answer
+from campaign_agent.validators.downstream import Downstream
 from campaign_agent.view import LastRequest, ReviewView, build_view
 
 
@@ -83,6 +86,10 @@ class Services:
     base: LeadgenFile | None = (
         None  # the base config approvals are checked against; None = the packaged one
     )
+    # Level 6: the Marketing Agent's own loader. None = not configured (the level shows as skipped).
+    downstream: Downstream | None = None
+    # What the Marketing Agent reports (read from the database when asked). None = it never reported.
+    ma_status: Callable[[], MaStatus | None] | None = None
 
 
 @dataclass(frozen=True)
@@ -120,6 +127,7 @@ class _Turn:
     candidate: Candidate | None = None
     action: Action | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+    downstream: Downstream | None = None
 
     def absorb(self, merge: MergeResult) -> None:
         self.ir = merge.ir
@@ -140,7 +148,7 @@ def _settle(t: _Turn, *, direct_edit: bool = False) -> None:
 def _validate(t: _Turn) -> None:
     t.ir = apply_defaults(t.ir).ir
     t.conv = t.conv.after(Event.VALIDATE)
-    candidate = build_candidate(t.ir)
+    candidate = build_candidate(t.ir, downstream=t.downstream)
     t.candidate = candidate
     if candidate.can_freeze:
         t.conv = t.conv.after(Event.VALIDATION_PASSED).after(Event.FROZEN)
@@ -361,7 +369,7 @@ def _approve(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
             "that is not the latest candidate, or its text changed; review the current one",
             current={"version": candidate.version_no, "sha256": candidate.sha256},
         )
-    report = validate_overlay_text(candidate.yaml, svc.base)
+    report = validate_overlay_text(candidate.yaml, svc.base, svc.downstream)
     if not report.passed:
         raise RequestError(
             ErrorCode.PUBLISH_BLOCKED,
@@ -374,9 +382,27 @@ def _approve(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
             },
             conv=ws.conv.after(Event.PUBLISH_BLOCKED),
         )
+    _refuse_unloadable_contract(svc, CONFIG_VERSION)
     t.conv = ws.conv.after(event).after(Event.PUBLISHED)
     t.action = Action("publish", version, sha, req.requested_by)
     t.extra = {"published": True, "version": version, "effective_from": "next_pass"}
+
+
+def _refuse_unloadable_contract(svc: Services, contract_version: str) -> None:
+    """Do not publish what the Marketing Agent has said it cannot load. Unknown (never reported, or offline) is allowed."""
+    status = svc.ma_status() if svc.ma_status else None
+    if status is None or status.supports(contract_version) is not False:
+        return
+    raise RequestError(
+        ErrorCode.PUBLISH_BLOCKED,
+        f"the Marketing Agent loads contract version(s) "
+        f"{', '.join(status.supported_contract_versions)}, "
+        f"not {contract_version}; update the Marketing Agent first",
+        {
+            "contract_version": contract_version,
+            "ma_supported": list(status.supported_contract_versions),
+        },
+    )
 
 
 def _rollback(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
@@ -444,7 +470,7 @@ def handle(req: Request, ws: Workspace, svc: Services) -> Outcome:
     name = "" if looks_like_secret(ws.name) else ws.name[:200]
     detail = "" if looks_like_secret(ws.detail) else ws.detail[:5000]
     ir = ws.ir or new_ir(ws.campaign_id, name, detail)
-    t = _Turn(ir=ir, conv=ws.conv, turn=ws.conv.turn + 1)
+    t = _Turn(ir=ir, conv=ws.conv, turn=ws.conv.turn + 1, downstream=svc.downstream)
     error: RequestError | None = None
     try:
         _check_revision(req, ir)
@@ -466,7 +492,7 @@ def handle(req: Request, ws: Workspace, svc: Services) -> Outcome:
             conv = conv.model_copy(update={"state": State.MODEL_UNAVAILABLE})
         elif error.code is ErrorCode.MODEL_UNAVAILABLE:
             conv = _model_down(ws.conv)
-        t = _Turn(ir=ir, conv=conv, turn=ws.conv.turn)
+        t = _Turn(ir=ir, conv=conv, turn=ws.conv.turn, downstream=svc.downstream)
         t.warnings = []
     return _outcome(req, ws, t, error)
 

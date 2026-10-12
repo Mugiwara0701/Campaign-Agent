@@ -338,3 +338,41 @@ def test_a_direct_edit_after_publishing_also_starts_a_new_candidate() -> None:
     assert out.error is None
     assert out.conv.state is State.AWAITING_REVIEW
     assert out.candidate is not None and "acme" in out.candidate.yaml
+
+
+# --- the Marketing Agent's contract version (M8) ---------------------------------------------------------------
+
+
+def with_ma(versions: list[str]) -> Services:
+    from campaign_agent.ma_status import parse_status
+
+    status = parse_status({"supported_contract_versions": versions, "current_campaign": None})
+    return Services(
+        Extractor(StubAdapter([COMPLETE_REPLY]), sleep=lambda _s: None), ma_status=lambda: status
+    )
+
+
+def approve_with(svc_: Services):  # type: ignore[no-untyped-def]
+    ws = reviewing()
+    assert ws.candidate is not None
+    payload = {"version": 1, "sha256": ws.candidate.sha256}
+    return ws, handle(request("approve", payload), ws, svc_)
+
+
+def test_a_version_the_marketing_agent_cannot_load_is_not_published() -> None:
+    ws, out = approve_with(with_ma(["2.0"]))
+    assert out.error is not None and out.error.code is ErrorCode.PUBLISH_BLOCKED
+    assert "2.0" in out.error.detail and out.error.result["ma_supported"] == ["2.0"]
+    assert out.action is None
+    # nothing about the campaign changed; try again after the update
+    assert out.conv.state is ws.conv.state
+
+
+def test_a_version_the_marketing_agent_loads_is_published() -> None:
+    _, out = approve_with(with_ma(["1.0", "1.1"]))
+    assert out.error is None and out.action is not None
+
+
+def test_an_unknown_marketing_agent_never_blocks_a_publish() -> None:
+    _, out = approve_with(with_ma([]))
+    assert out.error is None and out.action is not None

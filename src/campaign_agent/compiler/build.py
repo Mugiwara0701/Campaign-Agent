@@ -1,4 +1,4 @@
-"""IR -> candidate: compile, serialise, validate L3 to L5. L6 (the MA's loader) arrives in M8."""
+"""IR -> candidate: compile, serialise, validate L3 to L5, then L6 (the Marketing Agent's own loader)."""
 
 from dataclasses import dataclass
 
@@ -16,6 +16,7 @@ from campaign_agent.ir.hashing import ir_hash
 from campaign_agent.ir.models import CampaignIR
 from campaign_agent.serializer.yaml_serializer import serialize_overlay
 from campaign_agent.validators.business_rules import check_business_rules
+from campaign_agent.validators.downstream import Downstream
 from campaign_agent.validators.report import Issue, LevelResult, ValidationReport, level_result
 from campaign_agent.validators.schema import check_schema
 from campaign_agent.validators.yaml_check import check_yaml
@@ -41,7 +42,22 @@ class Candidate:
         return self.report.passed
 
 
-def build_candidate(ir: CampaignIR, base: LeadgenFile | None = None) -> Candidate:
+def _level6(
+    earlier: tuple[LevelResult, ...], text: str, downstream: Downstream | None
+) -> LevelResult:
+    """L6 runs only when L3 to L5 passed: the MA's loader would reject the file anyway, at the cost of a process."""
+    if downstream is None:
+        return LevelResult(
+            6, "downstream", "skipped", note="no Marketing Agent loader is configured"
+        )
+    if any(lv.status == "failed" for lv in earlier):
+        return LevelResult(6, "downstream", "skipped", note="not run: an earlier level failed")
+    return downstream.check(text)
+
+
+def build_candidate(
+    ir: CampaignIR, base: LeadgenFile | None = None, downstream: Downstream | None = None
+) -> Candidate:
     base = base or base_config()
     compiled = compile_overlay(ir)
     digest = ir_hash(ir)
@@ -54,14 +70,12 @@ def build_candidate(ir: CampaignIR, base: LeadgenFile | None = None) -> Candidat
     )
     effective = merge_onto_base(compiled.data, base)
     base_dump = base.model_dump(mode="python")
-    levels = (
+    first = (
         check_schema(compiled.data, effective),
         check_business_rules(compiled.data, effective, base_dump),
         check_yaml(text),
-        LevelResult(
-            6, "downstream", "skipped", note="the Marketing Agent's loader is checked from M8"
-        ),
     )
+    levels = (*first, _level6(first, text, downstream))
     return Candidate(
         yaml=text,
         sha256=sha256_text(text),
@@ -73,27 +87,24 @@ def build_candidate(ir: CampaignIR, base: LeadgenFile | None = None) -> Candidat
     )
 
 
-def validate_overlay_text(text: str, base: LeadgenFile | None = None) -> ValidationReport:
+def validate_overlay_text(
+    text: str, base: LeadgenFile | None = None, downstream: Downstream | None = None
+) -> ValidationReport:
     """Check a stored overlay again, from its text, against the base config as it is now.
 
     Used right before publishing: the candidate was valid when it was made, but the base config, the
-    contract or the checks may have changed since. Levels 3 to 5; level 6 arrives in M8.
+    contract, the checks or the Marketing Agent's checkout may have changed since. Levels 3 to 6.
     """
     base = base or base_config()
-    skipped = LevelResult(
-        6, "downstream", "skipped", note="the Marketing Agent's loader is checked from M8"
-    )
     try:
         data = parse_yaml(text)
     except ContractViolation as exc:
         broken = level_result(5, "yaml", [Issue(5, "parse", "(yaml)", str(exc))])
-        return ValidationReport((broken, skipped))
+        return ValidationReport((broken, _level6((broken,), text, downstream)))
     effective = merge_onto_base(data, base)
-    return ValidationReport(
-        (
-            check_schema(data, effective),
-            check_business_rules(data, effective, base.model_dump(mode="python")),
-            check_yaml(text),
-            skipped,
-        )
+    first = (
+        check_schema(data, effective),
+        check_business_rules(data, effective, base.model_dump(mode="python")),
+        check_yaml(text),
     )
+    return ValidationReport((*first, _level6(first, text, downstream)))

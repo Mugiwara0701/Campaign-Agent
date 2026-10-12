@@ -68,7 +68,9 @@ def _serve(command: str, settings: Settings) -> int:
     from campaign_agent.llm import make_adapter
     from campaign_agent.llm.adapter import GenParams
     from campaign_agent.logs import setup_logging
+    from campaign_agent.ma_status import MaStatus, fetch_status
     from campaign_agent.store.db import Database
+    from campaign_agent.validators.downstream import Downstream
 
     setup_logging()
     if settings.database_url is None:
@@ -83,9 +85,20 @@ def _serve(command: str, settings: Settings) -> int:
         lease_s=settings.lease_s,
         max_attempts=settings.max_attempts,
     )
+
+    def ma_status() -> MaStatus | None:
+        with db.transaction() as conn:
+            return fetch_status(conn)
+
+    downstream = Downstream(
+        checkout=settings.ma_checkout,
+        python=settings.ma_python,
+        timeout_s=settings.ma_timeout_s,
+        required=settings.ma_required,
+    )
     worker = Worker(
         db,
-        Services(extractor),
+        Services(extractor, downstream=downstream, ma_status=ma_status),
         cfg,
         model_name=settings.llm_model,
         poll_interval_s=settings.poll_interval_s,

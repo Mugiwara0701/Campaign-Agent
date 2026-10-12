@@ -33,6 +33,7 @@ from campaign_agent.jobs.handlers import (
     progress_state,
 )
 from campaign_agent.jobs.requests import ErrorCode, Request, RequestError
+from campaign_agent.ma_status import MaStatus, fetch_status
 from campaign_agent.store import repositories as repo
 from campaign_agent.store.db import Conn, Database
 from campaign_agent.view import LastRequest, ReviewView, VersionView
@@ -151,6 +152,38 @@ def _with_versions(
     return view.model_copy(
         update={"versions": versions, "live": live is not None, "live_version": live}
     )
+
+
+def with_applied(
+    view: ReviewView, status: MaStatus | None, campaign_id: str, rows: list[dict[str, Any]]
+) -> ReviewView:
+    """Whether the Marketing Agent runs the live version. Unknown until it has reported."""
+    live = next((r for r in rows if r["live"]), None)
+    if live is None or status is None or status.current is None:
+        return view.model_copy(update={"applied": None, "ma_error": None})
+    applied = status.applied(campaign_id, live["version_no"], live["sha256"])
+    error = None if applied else status.rejection(campaign_id, live["version_no"])
+    return view.model_copy(update={"applied": applied, "ma_error": error})
+
+
+def refresh_applied(db: Database) -> bool:
+    """Bring the live campaign's view up to date with what the Marketing Agent reports. Returns whether it changed."""
+    with db.transaction() as conn:
+        row = conn.execute(
+            "select campaign_id from public.campaign_state where active_version_id is not null"
+        ).fetchone()
+        if row is None:
+            return False
+        cid = str(row["campaign_id"])
+        state = repo.get_state(conn, cid, lock=True)
+        if state is None or not state["review_view"]:
+            return False
+        before = ReviewView.model_validate(state["review_view"])
+        after = with_applied(before, fetch_status(conn), cid, repo.versions_summary(conn, cid))
+        if after == before:
+            return False
+        repo.update_view(conn, cid, after.model_dump(mode="json"))
+        return True
 
 
 def _run_action(conn: Conn, req: Request, action: Action) -> list[str]:
@@ -274,7 +307,10 @@ def _store(conn: Conn, req: Request, ws: Workspace, outcome: Outcome) -> None:
     superseded: list[str] = []
     if outcome.action is not None and outcome.error is None:
         superseded = _run_action(conn, req, outcome.action)
-    view = _with_versions(outcome.view, repo.versions_summary(conn, req.campaign_id), version_no)
+    rows = repo.versions_summary(conn, req.campaign_id)
+    view = with_applied(
+        _with_versions(outcome.view, rows, version_no), fetch_status(conn), req.campaign_id, rows
+    )
     repo.save_state(
         conn,
         req.campaign_id,

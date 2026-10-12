@@ -8,7 +8,8 @@ How a reviewed candidate becomes the campaign the Marketing Agent (MA) runs. SQL
 
 `campaign_state.active_version_id` points to the version the MA should run. It is **the only thing that makes a campaign
 live**. Approving a campaign sends no email and starts nothing: every email is still approved by a person in Slack, and the
-pipeline is still started with the existing Start button. The MA reads the pointer at the start of its next pass (M8).
+pipeline is still started with the existing Start button. The MA reads the pointer at the start of its next pass (the MA's side of M8 is listed in
+[marketing-agent-m8-work.md](marketing-agent-m8-work.md)). Whether it did is shown as `applied` in the view.
 
 ## The rules, enforced by the database
 
@@ -35,7 +36,8 @@ three functions (`security definer`), so the rules hold even if the application 
 4. in one transaction: approves the version, makes it live, stores the new state. If the store fails the whole transaction rolls back, the state is `PUBLISH_FAILED`, and the same approval can be sent again.
 
 Approving something that is already live is a harmless repeat. The approver recorded is the `requested_by` the dashboard
-server sends (the signed-in user), at most 100 characters. Level 6 (the MA's real loader) joins the check in M8.
+server sends (the signed-in user), at most 100 characters. Level 6 (the MA's real loader, `validators/downstream.py`) is part of the same check when `MA_CHECKOUT` is set; the
+approval is also refused when the MA reported contract versions that do not include ours. See [marketing-agent-m8-work.md](marketing-agent-m8-work.md).
 
 ## After publishing
 

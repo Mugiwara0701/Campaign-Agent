@@ -43,6 +43,11 @@ def parse_answer(question: Question, raw: str) -> dict[str, Any]:
 def format_view(view: ReviewView) -> list[str]:
     """The review as plain text, the way a person reads it."""
     lines = [f"State: {view.state}   revision {view.revision}   live: {view.live_version or 'no'}"]
+    if view.live:
+        seen = "not reported" if view.applied is None else ("yes" if view.applied else "not yet")
+        lines[0] += f"   applied by the Marketing Agent: {seen}"
+        if view.ma_error:
+            lines.append(f"The Marketing Agent refused it: {view.ma_error}")
     for section in view.sections:
         lines.append(f"{section.title}:")
         for f in section.fields:
