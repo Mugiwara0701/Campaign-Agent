@@ -1,0 +1,6 @@
+# Fake test secrets in the first M4 commit (now assembled at run time, see tests/unit/fake_secrets.py).
+# None is a real credential. Format: commit:file:rule:line
+81857783accc824224b71dd499544d13d2b625d3:tests/unit/test_input_guard.py:generic-api-key:50
+81857783accc824224b71dd499544d13d2b625d3:tests/unit/test_input_guard.py:jwt:47
+81857783accc824224b71dd499544d13d2b625d3:tests/unit/test_input_guard.py:aws-access-token:42
+81857783accc824224b71dd499544d13d2b625d3:tests/unit/test_extractor.py:aws-access-token:141

@@ -1,6 +1,7 @@
 import pytest
 
 from campaign_agent.guard.input_guard import MAX_CHARS, MAX_EDIT_CHARS, check_input
+from tests.unit import fake_secrets as fs
 
 
 def codes(text: str, kind: str = "message") -> list[str]:
@@ -39,16 +40,16 @@ def test_control_and_invisible_characters_are_rejected(text: str) -> None:
 @pytest.mark.parametrize(
     "text",
     [
-        "here is my key AKIAABCDEFGHIJKLMNOP",
-        "token ghp_abcdefghijklmnopqrstuvwxyz0123456789",
-        "slack xoxb-1234567890-abcdefghij",
-        "use sk-abcdefghijklmnopqrstuvwxyz1234",
-        "AIzaSyA-abcdefghijklmnopqrstuvwxyz012345",
-        "jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnop",
-        "connect to postgresql://user:hunter2pass@db.example.com/postgres",
+        "here is my key " + fs.AWS,
+        "token " + fs.GITHUB,
+        "slack " + fs.SLACK,
+        "use " + fs.SK_KEY,
+        fs.GOOGLE,
+        "jwt " + fs.JWT,
+        "connect to " + fs.URL_PASSWORD,
         "password: correcthorsebattery",
-        "API_KEY=abcdef123456",
-        "-----BEGIN RSA PRIVATE KEY-----\nMIIE",
+        fs.API_KEY_LINE,
+        fs.PRIVATE_KEY,
     ],
 )
 def test_secret_like_strings_are_rejected_without_being_echoed(text: str) -> None:

@@ -32,6 +32,7 @@ from campaign_agent.llm.adapter import (
 )
 from campaign_agent.llm.stub import StubAdapter
 from campaign_agent.merger.patch_merger import Reason, Source, TurnContext, merge_patch
+from tests.unit import fake_secrets as fs
 from tests.unit.helpers import ir_with
 
 TEXT = "Find US companies with 500-5,000 employees building automotive infotainment on Android"
@@ -138,7 +139,7 @@ def test_replies_with_a_think_block_or_one_code_fence_are_accepted() -> None:
 
 @pytest.mark.parametrize(
     "text",
-    ["", "x" * 6000, "my key is AKIAABCDEFGHIJKLMNOP", "password: hunter2hunter", "bell\x07"],
+    ["", "x" * 6000, "my key is " + fs.AWS, "password: hunter2hunter", "bell\x07"],
 )
 def test_rejected_input_never_reaches_the_model(text: str) -> None:
     stub = StubAdapter([GOOD])
