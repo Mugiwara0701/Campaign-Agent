@@ -60,8 +60,8 @@ def format_view(view: ReviewView) -> list[str]:
         for q in view.questions:
             skip = "" if q.skippable else "   (cannot be skipped)"
             lines.append(f"  [{q.id}] {q.text}{skip}")
-            for c in q.choices:
-                lines.append(f"      {c.id}: {c.label}")
+            for choice in q.choices:
+                lines.append(f"      {choice.id}: {choice.label}")
             if q.allow_text:
                 lines.append("      or type your own answer")
     if view.candidate:
