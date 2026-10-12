@@ -57,6 +57,7 @@ M0 → M1 → M2 ─┬→ M3 ─┐
 - Fix the inconsistencies found in the doc review (research in MVP vs deferred, discard and publish-failure transitions, "applied" status ownership, candidate vs approved versions, `min_relevance_terms` missing from the IR).
 - Rename the scaffold module `api/` to `inbox/`; drop `fastapi` and `uvicorn` from the dependencies.
 - Write the inbox table contract: columns, request types, statuses, error codes, idempotency key, `base_revision`. Agree it with the dashboard developer.
+- Review `docs/supabase-tables.md` with the dashboard developer: schedule semantics (`is_active`, dates), delete behaviour, one rule for the message text, same Supabase project, who runs the migration, the dashboard routes that write requests.
 - Record decisions: U1 (US-only, size, roles), U2 (approval starts pipeline?), U3 (switch at pass boundary), U5 (search provider), U7 (model access), U8 (retention), A5 (contract ownership), commit attribution.
 - Turn on branch protection for `main` and require the CI checks.
 
@@ -171,7 +172,7 @@ M0 → M1 → M2 ─┬→ M3 ─┐
 
 **Tasks**
 
-- Migrations for `campaigns`, `campaign_turns`, `campaign_requests` (inbox), `campaign_views`, `campaign_versions`, `campaign_active`, `ca_heartbeat`. Candidates and approved versions kept distinguishable.
+- Migrations for the four CA tables `campaign_request`, `campaign_state`, `campaign_version`, `ca_heartbeat`, all children of the dashboard's existing `public.campaign` (see [supabase-tables.md](supabase-tables.md); draft SQL in `migrations/0001_campaign_agent_tables.sql`). Run on Supabase and verified.
 - DB roles: dashboard (insert requests, read views), Setup part, Publisher, each minimal. Mirror the MA's `0012_pipeline_api_role.sql`.
 - Poll loop: claim with `FOR UPDATE SKIP LOCKED`, one running request per campaign, idempotency key, `base_revision` concurrency, error codes in the request row.
 - Entry point `python -m campaign_agent start`; heartbeat row.
@@ -192,7 +193,7 @@ M0 → M1 → M2 ─┬→ M3 ─┐
 
 - Freeze candidate versions: yaml, sha256, IR, validation report, not-applied report.
 - Approve request: only the latest candidate, matching version and sha256; stale approval fails with the current candidate.
-- Publisher transaction: verify approver, candidate and hash, re-run L5, insert approval, update `campaign_active`. Idempotent retry.
+- Publisher transaction: verify approver, candidate and hash, re-run L5, set the approval fields on the version, update `campaign_state.active_version_id`. Idempotent retry.
 - Single active campaign rule: publishing replaces the active one; define the superseded state.
 - Rollback or re-activate a previous version; stop a campaign (deactivate).
 - Optional `start_pipeline` flag if U2 says yes.
@@ -211,7 +212,7 @@ M0 → M1 → M2 ─┬→ M3 ─┐
 **Tasks**
 
 - **[MA repo]** Strict versioned loader, contract package, overlay merge, `--campaign <file>`, effective-config hash in run reports.
-- **[MA repo]** Migration grants and pass-start pickup of `campaign_active`: strict load, sha256 check, last-good fallback, `current_campaign` and supported contract version in status.
+- **[MA repo]** Migration grants and pass-start pickup of the active version (`campaign_state.active_version_id`): strict load, sha256 check, last-good fallback, `current_campaign` and supported contract version in status.
 - CA: install the MA contract package and a pinned MA checkout on the CA machine; implement L6 as an isolated subprocess (no network, timeout), plus the no-network query-generation check.
 - Refuse to publish a version the reported MA contract version cannot load.
 - Show whether the MA has applied the active version (read path defined in M0).
