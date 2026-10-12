@@ -1,0 +1,4 @@
+# expect: project_context.hardware
+config_version: "1.0"
+project_context:
+  hardware: [RFID]

@@ -1,0 +1,4 @@
+# expect: targeting
+config_version: "1.0"
+targeting:
+  include_countries: [US]

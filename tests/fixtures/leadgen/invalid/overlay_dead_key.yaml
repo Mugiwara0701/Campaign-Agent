@@ -1,0 +1,4 @@
+# expect: limits.host_delay_seconds
+config_version: "1.0"
+limits:
+  host_delay_seconds: 2.0

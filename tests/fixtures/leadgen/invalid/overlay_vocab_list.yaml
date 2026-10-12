@@ -1,0 +1,4 @@
+# expect: search.builder_phrases
+config_version: "1.0"
+search:
+  builder_phrases: [company developing]

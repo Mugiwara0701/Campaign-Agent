@@ -1,0 +1,4 @@
+# expect: project_context.products
+config_version: "1.0"
+project_context:
+  products: ["kiosk\nexclude_companies: []"]

@@ -3,6 +3,8 @@ extends: default
 ignore: |
   .venv/
   node_modules/
+  src/campaign_agent/contract/base_config.yaml
+  tests/fixtures/
 
 rules:
   line-length:

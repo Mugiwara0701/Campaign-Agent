@@ -1,0 +1,7 @@
+# expect: max_pages_per_run
+config_version: "1.0"
+search:
+  queries_per_run: 20
+  pages_per_query: 6
+limits:
+  max_pages_per_run: 100

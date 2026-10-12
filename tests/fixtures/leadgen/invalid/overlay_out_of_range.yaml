@@ -1,0 +1,4 @@
+# expect: qualification.min_confidence
+config_version: "1.0"
+qualification:
+  min_confidence: 1.5

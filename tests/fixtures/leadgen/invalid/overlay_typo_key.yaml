@@ -1,0 +1,4 @@
+# expect: qualification.min_qualfy
+config_version: "1.0"
+qualification:
+  min_qualfy: 70

@@ -1,0 +1,4 @@
+# expect: search.queries_per_run
+config_version: "1.0"
+search:
+  queries_per_run: many

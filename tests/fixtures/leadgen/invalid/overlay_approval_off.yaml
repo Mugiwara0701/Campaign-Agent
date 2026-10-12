@@ -1,0 +1,4 @@
+# expect: approval
+config_version: "1.0"
+approval:
+  required: false
