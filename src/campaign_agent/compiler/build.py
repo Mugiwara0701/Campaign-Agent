@@ -9,13 +9,14 @@ from campaign_agent.compiler.compiler import (
     merge_onto_base,
     sha256_text,
 )
+from campaign_agent.contract.loader import ContractViolation, parse_yaml
 from campaign_agent.contract.model import CONFIG_VERSION, LeadgenFile
 from campaign_agent.contract.vocabularies import base_config
 from campaign_agent.ir.hashing import ir_hash
 from campaign_agent.ir.models import CampaignIR
 from campaign_agent.serializer.yaml_serializer import serialize_overlay
 from campaign_agent.validators.business_rules import check_business_rules
-from campaign_agent.validators.report import LevelResult, ValidationReport
+from campaign_agent.validators.report import Issue, LevelResult, ValidationReport, level_result
 from campaign_agent.validators.schema import check_schema
 from campaign_agent.validators.yaml_check import check_yaml
 
@@ -69,4 +70,30 @@ def build_candidate(ir: CampaignIR, base: LeadgenFile | None = None) -> Candidat
         contract_version=CONFIG_VERSION,
         report=ValidationReport(levels),
         not_applied=compiled.not_applied,
+    )
+
+
+def validate_overlay_text(text: str, base: LeadgenFile | None = None) -> ValidationReport:
+    """Check a stored overlay again, from its text, against the base config as it is now.
+
+    Used right before publishing: the candidate was valid when it was made, but the base config, the
+    contract or the checks may have changed since. Levels 3 to 5; level 6 arrives in M8.
+    """
+    base = base or base_config()
+    skipped = LevelResult(
+        6, "downstream", "skipped", note="the Marketing Agent's loader is checked from M8"
+    )
+    try:
+        data = parse_yaml(text)
+    except ContractViolation as exc:
+        broken = level_result(5, "yaml", [Issue(5, "parse", "(yaml)", str(exc))])
+        return ValidationReport((broken, skipped))
+    effective = merge_onto_base(data, base)
+    return ValidationReport(
+        (
+            check_schema(data, effective),
+            check_business_rules(data, effective, base.model_dump(mode="python")),
+            check_yaml(text),
+            skipped,
+        )
     )

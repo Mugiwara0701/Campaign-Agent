@@ -9,12 +9,13 @@ validation failure to fix, or the model being unavailable.
 """
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import ValidationError
 
-from campaign_agent.compiler.build import Candidate, build_candidate
+from campaign_agent.compiler.build import Candidate, build_candidate, validate_overlay_text
 from campaign_agent.compiler.compiler import NotApplied, compile_overlay
+from campaign_agent.contract.model import LeadgenFile
 from campaign_agent.conversation.state import ConversationState
 from campaign_agent.conversation.state_machine import (
     Event,
@@ -45,6 +46,23 @@ from campaign_agent.view import LastRequest, ReviewView, build_view
 
 
 @dataclass(frozen=True)
+class StoredCandidate:
+    """The newest stored candidate: what an approval has to name exactly."""
+
+    version_no: int
+    sha256: str
+    yaml: str
+
+
+@dataclass(frozen=True)
+class VersionInfo:
+    version_no: int
+    sha256: str
+    approved: bool
+    live: bool
+
+
+@dataclass(frozen=True)
 class Workspace:
     """Everything a request needs, loaded from the database."""
 
@@ -54,11 +72,26 @@ class Workspace:
     ir: CampaignIR | None
     conv: ConversationState
     previous_view: ReviewView | None = None
+    candidate: StoredCandidate | None = None
+    versions: tuple[VersionInfo, ...] = ()
 
 
 @dataclass(frozen=True)
 class Services:
     extractor: Extractor
+    base: LeadgenFile | None = (
+        None  # the base config approvals are checked against; None = the packaged one
+    )
+
+
+@dataclass(frozen=True)
+class Action:
+    """A change to what is live. Done by the database functions, in the same transaction as the state."""
+
+    kind: Literal["publish", "activate", "deactivate"]
+    version_no: int | None = None
+    sha256: str | None = None
+    approver: str = ""
 
 
 @dataclass
@@ -69,6 +102,7 @@ class Outcome:
     candidate: Candidate | None = None  # to store as a new version, when it can be frozen
     result: dict[str, Any] = field(default_factory=dict)
     error: RequestError | None = None
+    action: Action | None = None
 
 
 # --- the turn after the campaign changed -----------------------------------------------------------------------
@@ -83,6 +117,8 @@ class _Turn:
     warnings: list[str] = field(default_factory=list)
     notices: list[Notice] = field(default_factory=list)
     candidate: Candidate | None = None
+    action: Action | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
 
     def absorb(self, merge: MergeResult) -> None:
         self.ir = merge.ir
@@ -170,12 +206,20 @@ def _edit(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
     if (text is None) == (ops is None):
         raise _fail(ErrorCode.INVALID_REQUEST, "send either text or ops")
     if text is not None:
-        _need_event(ws, Event.EDIT_WORDS)
-        t.conv = ws.conv.after(Event.EDIT_WORDS)
+        event = _edit_event(ws)
+        _need_event(ws, event)
+        t.conv = ws.conv.after(event)
         _text_extraction(svc, str(text), Source.EDIT_REQUEST, t)
         _settle(t)
         return
-    _need_event(ws, Event.FIELD_EDIT_COMPLETE)
+    if ws.conv.state is State.PUBLISHED:
+        # A change after publication starts a new candidate; the published version keeps running.
+        t.conv = ws.conv.after(Event.CHANGE_REQUEST)
+        direct_edit = False
+    else:
+        _need_event(ws, Event.FIELD_EDIT_COMPLETE)
+        t.conv = ws.conv
+        direct_edit = True
     if not isinstance(ops, list):
         raise _fail(ErrorCode.INVALID_REQUEST, "ops must be a list")
     try:
@@ -195,8 +239,12 @@ def _edit(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
             ],
         )
     t.absorb(merge)
-    t.conv = ws.conv
-    _settle(t, direct_edit=True)
+    _settle(t, direct_edit=direct_edit)
+
+
+def _edit_event(ws: Workspace) -> Event:
+    """A change in words: in review it is an edit; after publication it is a change request."""
+    return Event.CHANGE_REQUEST if ws.conv.state is State.PUBLISHED else Event.EDIT_WORDS
 
 
 def _answer(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
@@ -268,12 +316,108 @@ def _discard(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
     t.conv = ws.conv.after(Event.DISCARD)
 
 
+def _approve(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
+    """Approve exactly the candidate the user reviewed, and make it live."""
+    payload = req.payload
+    if payload.get("start_pipeline"):
+        raise _fail(
+            ErrorCode.NOT_AVAILABLE,
+            "starting the pipeline from an approval is not available; use the Start button",
+        )
+    version, sha = payload.get("version"), payload.get("sha256")
+    if not isinstance(version, int) or isinstance(version, bool) or not isinstance(sha, str):
+        raise _fail(
+            ErrorCode.INVALID_REQUEST, "send version (a number) and sha256 (the text you reviewed)"
+        )
+    live = next((v for v in ws.versions if v.live), None)
+    if (
+        ws.conv.state is State.PUBLISHED
+        and live
+        and (live.version_no, live.sha256) == (version, sha)
+    ):
+        t.conv = ws.conv  # a repeated approval of what is already live: nothing to do
+        t.extra = {
+            "published": True,
+            "version": version,
+            "effective_from": "next_pass",
+            "already": True,
+        }
+        return
+    if ws.conv.state is State.AWAITING_REVIEW:
+        event = Event.APPROVE
+    elif ws.conv.state is State.PUBLISH_FAILED:
+        event = Event.RETRY_PUBLISH
+    else:
+        raise _fail(
+            ErrorCode.WRONG_STATE, f"nothing to approve while the campaign is {ws.conv.state.value}"
+        )
+    candidate = ws.candidate
+    if candidate is None:
+        raise _fail(ErrorCode.WRONG_STATE, "there is no candidate to approve")
+    if (candidate.version_no, candidate.sha256) != (version, sha):
+        raise _fail(
+            ErrorCode.STALE_APPROVAL,
+            "that is not the latest candidate, or its text changed; review the current one",
+            current={"version": candidate.version_no, "sha256": candidate.sha256},
+        )
+    report = validate_overlay_text(candidate.yaml, svc.base)
+    if not report.passed:
+        raise RequestError(
+            ErrorCode.PUBLISH_BLOCKED,
+            "the candidate no longer passes the checks: " + report.errors[0].message,
+            {
+                "issues": [
+                    {"level": i.level, "code": i.code, "path": i.path, "message": i.message}
+                    for i in report.errors
+                ]
+            },
+            conv=ws.conv.after(Event.PUBLISH_BLOCKED),
+        )
+    t.conv = ws.conv.after(event).after(Event.PUBLISHED)
+    t.action = Action("publish", version, sha, req.requested_by)
+    t.extra = {"published": True, "version": version, "effective_from": "next_pass"}
+
+
+def _rollback(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
+    """Make a version that was approved before live again. Does not change the conversation."""
+    version = req.payload.get("version")
+    if not isinstance(version, int) or isinstance(version, bool):
+        raise _fail(ErrorCode.INVALID_REQUEST, "send version (a number)")
+    match = next((v for v in ws.versions if v.version_no == version), None)
+    if match is None:
+        raise _fail(ErrorCode.INVALID_REQUEST, f"there is no version {version}")
+    if not match.approved:
+        raise _fail(
+            ErrorCode.WRONG_STATE,
+            f"version {version} was never approved; only approved versions can go live",
+        )
+    t.conv = ws.conv
+    t.extra = {"live_version": version, "effective_from": "next_pass"}
+    if match.live:
+        t.extra["already"] = True
+    else:
+        t.action = Action("activate", version)
+
+
+def _deactivate(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
+    """Stop: nothing of this campaign is live. Its versions stay and can be made live again."""
+    t.conv = ws.conv
+    t.extra = {"live_version": None}
+    if any(v.live for v in ws.versions):
+        t.action = Action("deactivate")
+    else:
+        t.extra["already"] = True
+
+
 _HANDLERS = {
     "interpret": _interpret,
     "edit": _edit,
     "answer": _answer,
     "suggestion": _suggestion,
     "discard": _discard,
+    "approve": _approve,
+    "rollback": _rollback,
+    "deactivate": _deactivate,
 }
 
 
@@ -282,7 +426,7 @@ def progress_state(req: Request, ws: Workspace) -> State | None:
     event = {
         "interpret": Event.MESSAGE if ws.conv.state is State.DRAFT else Event.RETRY,
         "answer": Event.ANSWER,
-        "edit": Event.EDIT_WORDS if req.payload.get("text") is not None else None,
+        "edit": _edit_event(ws) if req.payload.get("text") is not None else None,
     }.get(req.request_type)
     if event is None:
         return None
@@ -301,21 +445,16 @@ def handle(req: Request, ws: Workspace, svc: Services) -> Outcome:
         _check_revision(req, ir)
         handler = _HANDLERS.get(req.request_type)
         if handler is None:
-            raise _fail(
-                ErrorCode.NOT_AVAILABLE
-                if req.request_type in ("approve", "rollback")
-                else ErrorCode.INVALID_REQUEST,
-                "publishing arrives in a later release"
-                if req.request_type in ("approve", "rollback")
-                else f"unknown request type {req.request_type!r}",
-            )
+            raise _fail(ErrorCode.INVALID_REQUEST, f"unknown request type {req.request_type!r}")
         handler(req, ws, t, svc)
     except RequestError as exc:
         error = exc
     if error is not None:
         # Nothing the request tried is kept, except that a model that is down is remembered.
         conv = ws.conv
-        if error.code is ErrorCode.MODEL_UNAVAILABLE and conv.state in (
+        if error.conv is not None:
+            conv = error.conv
+        elif error.code is ErrorCode.MODEL_UNAVAILABLE and conv.state in (
             State.DRAFT,
             State.PUBLISHED,
         ):
@@ -325,6 +464,9 @@ def handle(req: Request, ws: Workspace, svc: Services) -> Outcome:
         t = _Turn(ir=ir, conv=conv, turn=ws.conv.turn)
         t.warnings = []
     return _outcome(req, ws, t, error)
+
+
+_KEEPS_PREVIEW = frozenset({State.AWAITING_REVIEW, State.PUBLISHED, State.PUBLISH_FAILED})
 
 
 def _model_down(conv: ConversationState) -> ConversationState:
@@ -376,8 +518,9 @@ def _outcome(req: Request, ws: Workspace, t: _Turn, error: RequestError | None) 
                 "warnings": view.warnings,
             }
         )
-    elif view.candidate is None and t.conv.state is State.AWAITING_REVIEW and prev is not None:
-        view = view.model_copy(update={"candidate": prev.candidate})  # e.g. a rejected suggestion
+    elif view.candidate is None and prev is not None and t.conv.state in _KEEPS_PREVIEW:
+        # The version under review, or the one just published, stays on screen.
+        view = view.model_copy(update={"candidate": prev.candidate})
     frozen = t.candidate if (t.candidate and t.candidate.can_freeze and error is None) else None
     result: dict[str, Any] = {
         "state": t.conv.state.value,
@@ -389,4 +532,6 @@ def _outcome(req: Request, ws: Workspace, t: _Turn, error: RequestError | None) 
     }
     if error is not None:
         result = {**result, **error.result}
-    return Outcome(t.ir, t.conv, view, frozen, result, error)
+    else:
+        result.update(t.extra)
+    return Outcome(t.ir, t.conv, view, frozen, result, error, t.action if error is None else None)

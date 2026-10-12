@@ -4,24 +4,48 @@ Three short transactions with no model call inside any of them:
   1. claim the oldest request that may run (and recover requests whose worker vanished);
   2. load the campaign and show "working" in the dashboard;
   ... run the request (the model may take minutes) ...
-  3. store the new state, the candidate version and the result together, or release the request.
+  3. store the new state, the candidate version, any change of what is live, and the result together,
+     or release the request.
 A crash anywhere before step 3 changes nothing but a "processing" label that the lease then clears.
+
+What is live (the version the Marketing Agent runs) changes only through the database functions
+ca_publish, ca_activate and ca_deactivate, called in step 3 inside the same transaction as the state.
 """
 
 import logging
 from dataclasses import dataclass
 from typing import Any
 
+import psycopg
+
 from campaign_agent.compiler.build import Candidate
 from campaign_agent.conversation.state import ConversationState
+from campaign_agent.conversation.state_machine import Event
 from campaign_agent.ir.models import CampaignIR
-from campaign_agent.jobs.handlers import Outcome, Services, Workspace, handle, progress_state
-from campaign_agent.jobs.requests import ErrorCode, Request
+from campaign_agent.jobs.handlers import (
+    Action,
+    Outcome,
+    Services,
+    StoredCandidate,
+    VersionInfo,
+    Workspace,
+    handle,
+    progress_state,
+)
+from campaign_agent.jobs.requests import ErrorCode, Request, RequestError
 from campaign_agent.store import repositories as repo
 from campaign_agent.store.db import Conn, Database
-from campaign_agent.view import ReviewView
+from campaign_agent.view import LastRequest, ReviewView, VersionView
 
 log = logging.getLogger("campaign_agent.manager")
+
+# SQLSTATEs raised by the publishing functions (migrations/0015_campaign_agent_publish.sql).
+_DB_REFUSALS = {
+    "CA001": (ErrorCode.STALE_APPROVAL, "that is not the latest candidate, or its text changed"),
+    "CA002": (ErrorCode.INVALID_REQUEST, "no such version or campaign"),
+    "CA003": (ErrorCode.WRONG_STATE, "that version was never approved"),
+    "CA004": (ErrorCode.INVALID_REQUEST, "an approver is required"),
+}
 
 
 @dataclass(frozen=True)
@@ -43,31 +67,44 @@ def _request(row: dict[str, Any]) -> Request:
 
 
 def load_workspace(conn: Conn, campaign: dict[str, Any]) -> Workspace:
-    state = repo.get_state(conn, str(campaign["id"]))
+    campaign_id = str(campaign["id"])
+    state = repo.get_state(conn, campaign_id)
     ir = conv = view = None
+    candidate = None
     if state is not None:
         ir = CampaignIR.model_validate(state["ir"]) if state["ir"] else None
         conv = state["conversation"] or None
         view = ReviewView.model_validate(state["review_view"]) if state["review_view"] else None
+        if state["candidate_version_id"] is not None:
+            row = repo.get_version(conn, str(state["candidate_version_id"]))
+            if row is not None:
+                candidate = StoredCandidate(row["version_no"], row["sha256"], row["overlay_yaml"])
     # The saved conversation is the truth. campaign_state.current_state is only what the dashboard shows,
     # and it says "INTERPRETING" while a request runs; after a crash it must not be read back as the state.
     conversation = ConversationState.model_validate(conv) if conv else ConversationState()
+    versions = tuple(
+        VersionInfo(v["version_no"], v["sha256"], v["approved_at"] is not None, bool(v["live"]))
+        for v in repo.versions_summary(conn, campaign_id)
+    )
     return Workspace(
-        campaign_id=str(campaign["id"]),
+        campaign_id=campaign_id,
         name=campaign["campaign_name"] or "",
         detail=campaign["campaign_detail"] or "",
         ir=ir,
         conv=conversation,
         previous_view=view,
+        candidate=candidate,
+        versions=versions,
     )
 
 
-def _candidate_rows(candidate: Candidate) -> dict[str, Any]:
+def _candidate_rows(candidate: Candidate, ir: CampaignIR) -> dict[str, Any]:
     return {
         "overlay_yaml": candidate.yaml,
         "sha256": candidate.sha256,
         "ir_hash": candidate.ir_hash,
         "contract_version": candidate.contract_version,
+        "ir_snapshot": ir.model_dump(mode="json"),
         "validation_report": {
             "levels": [
                 {
@@ -94,11 +131,55 @@ def _candidate_rows(candidate: Candidate) -> dict[str, Any]:
     }
 
 
-def _final_view(outcome: Outcome, version_no: int | None) -> ReviewView:
-    """The view to store: the handler's, with the version number of a candidate stored just now."""
-    if outcome.candidate is not None and version_no is not None:
-        return outcome.view.with_candidate_version(version_no)
-    return outcome.view
+def _with_versions(
+    view: ReviewView, rows: list[dict[str, Any]], version_no: int | None = None
+) -> ReviewView:
+    """The stored view, with the version list and what is live read from the database."""
+    if version_no is not None and view.candidate is not None:
+        view = view.with_candidate_version(version_no)
+    versions = tuple(
+        VersionView(
+            version=r["version_no"],
+            sha256=r["sha256"],
+            approved_by=r["approved_by"],
+            approved_at=r["approved_at"].isoformat() if r["approved_at"] else None,
+            live=bool(r["live"]),
+        )
+        for r in rows
+    )
+    live = next((v.version for v in versions if v.live), None)
+    return view.model_copy(
+        update={"versions": versions, "live": live is not None, "live_version": live}
+    )
+
+
+def _run_action(conn: Conn, req: Request, action: Action) -> list[str]:
+    """Change what is live. Returns the campaigns that stopped being live because of it."""
+    if action.kind == "publish":
+        assert action.version_no is not None  # noqa: S101
+        assert action.sha256 is not None  # noqa: S101
+        done = repo.publish(
+            conn, req.campaign_id, action.version_no, action.sha256, action.approver
+        )
+    elif action.kind == "activate":
+        assert action.version_no is not None  # noqa: S101
+        done = repo.activate(conn, req.campaign_id, action.version_no)
+    else:
+        repo.deactivate(conn, req.campaign_id)
+        return []
+    return [str(c) for c in done.get("superseded", [])]
+
+
+def _refresh_superseded(conn: Conn, campaign_ids: list[str]) -> None:
+    """A campaign that is no longer live must not keep showing "live" in its dashboard view."""
+    for cid in campaign_ids:
+        state = repo.get_state(conn, cid)
+        if state is None or not state["review_view"]:
+            continue
+        view = _with_versions(
+            ReviewView.model_validate(state["review_view"]), repo.versions_summary(conn, cid)
+        )
+        repo.update_view(conn, cid, view.model_dump(mode="json"))
 
 
 def process_next(db: Database, svc: Services, cfg: ManagerConfig) -> bool:
@@ -125,8 +206,7 @@ def process_next(db: Database, svc: Services, cfg: ManagerConfig) -> bool:
             if shown is not None:
                 repo.set_progress(conn, req.campaign_id, shown.value)
         outcome = handle(req, ws, svc)
-        with db.transaction() as conn:
-            _store(conn, req, ws, outcome)
+        outcome = _store_or_refuse(db, req, ws, outcome)
     except Exception as exc:
         log.exception("request crashed", extra=context)
         with db.transaction() as conn:
@@ -138,6 +218,46 @@ def process_next(db: Database, svc: Services, cfg: ManagerConfig) -> bool:
     return True
 
 
+def _store_or_refuse(db: Database, req: Request, ws: Workspace, outcome: Outcome) -> Outcome:
+    """Store the outcome. If the database refuses the change of what is live, record that instead."""
+    try:
+        with db.transaction() as conn:
+            _store(conn, req, ws, outcome)
+        return outcome
+    except psycopg.Error as exc:
+        if outcome.action is None:
+            raise
+        code, detail = _DB_REFUSALS.get(
+            getattr(exc, "sqlstate", None) or "",
+            (
+                ErrorCode.PUBLISH_FAILED,
+                "the store did not accept the change; it is safe to try again",
+            ),
+        )
+        log.warning("publish refused", extra={"request_id": req.id, "code": code.value})
+        conv = ws.conv
+        if code is ErrorCode.PUBLISH_FAILED and outcome.action.kind == "publish":
+            first = (
+                Event.APPROVE if ws.conv.state.value == "AWAITING_REVIEW" else Event.RETRY_PUBLISH
+            )
+            conv = ws.conv.after(first).after(Event.PUBLISH_FAILED)
+        last = LastRequest(id=req.id, type=req.request_type, outcome="failed", code=code.value)
+        shown = (ws.previous_view or outcome.view).model_copy(
+            update={"state": conv.state.value, "last_request": last}
+        )
+        refused = Outcome(
+            ws.ir or outcome.ir,
+            conv,
+            shown,
+            None,
+            {"state": conv.state.value},
+            RequestError(code, detail),
+        )
+        with db.transaction() as conn:
+            _store(conn, req, ws, refused)
+        return refused
+
+
 def _store(conn: Conn, req: Request, ws: Workspace, outcome: Outcome) -> None:
     current = repo.get_state(conn, req.campaign_id, lock=True)
     candidate_id = (
@@ -147,9 +267,14 @@ def _store(conn: Conn, req: Request, ws: Workspace, outcome: Outcome) -> None:
     )
     version_no: int | None = None
     if outcome.candidate is not None:
-        version = repo.insert_candidate(conn, req.campaign_id, **_candidate_rows(outcome.candidate))
+        version = repo.insert_candidate(
+            conn, req.campaign_id, **_candidate_rows(outcome.candidate, outcome.ir)
+        )
         candidate_id, version_no = str(version["id"]), version["version_no"]
-    view = _final_view(outcome, version_no)
+    superseded: list[str] = []
+    if outcome.action is not None and outcome.error is None:
+        superseded = _run_action(conn, req, outcome.action)
+    view = _with_versions(outcome.view, repo.versions_summary(conn, req.campaign_id), version_no)
     repo.save_state(
         conn,
         req.campaign_id,
@@ -160,6 +285,7 @@ def _store(conn: Conn, req: Request, ws: Workspace, outcome: Outcome) -> None:
         review_view=view.model_dump(mode="json"),
         candidate_version_id=candidate_id,
     )
+    _refresh_superseded(conn, superseded)
     if outcome.error is not None:
         repo.fail_request(
             conn, req.id, outcome.error.code.value, outcome.error.detail, outcome.result

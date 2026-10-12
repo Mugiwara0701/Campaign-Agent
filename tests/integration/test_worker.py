@@ -184,18 +184,6 @@ def test_a_model_that_is_down_fails_the_request_and_can_be_retried(db) -> None: 
     assert state_row(db, cid)["current_state"] == "AWAITING_REVIEW"
 
 
-def test_publishing_is_not_available_yet(db) -> None:  # type: ignore[no-untyped-def]
-    cid = new_campaign(db, detail=COMPLETE_TEXT)
-    enqueue(db, cid, key="1")
-    w = worker(db, COMPLETE_REPLY)
-    w.run_once()
-    req = enqueue(db, cid, "approve", {"version": 1}, key="2")
-    w.run_once()
-    assert request_row(db, req["id"])["error_code"] == "not_available"
-    assert state_row(db, cid)["current_state"] == "AWAITING_REVIEW"
-    assert state_row(db, cid)["active_version_id"] is None
-
-
 def test_discard_and_a_discarded_campaign(db) -> None:  # type: ignore[no-untyped-def]
     cid = new_campaign(db, detail=COMPLETE_TEXT)
     enqueue(db, cid, key="1")

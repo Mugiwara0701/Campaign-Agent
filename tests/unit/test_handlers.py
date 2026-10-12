@@ -388,13 +388,6 @@ def test_a_discarded_campaign_accepts_nothing() -> None:
     assert out.error is not None and out.error.code is ErrorCode.WRONG_STATE
 
 
-@pytest.mark.parametrize("kind", ["approve", "rollback"])
-def test_publishing_requests_are_not_available_yet(kind: str) -> None:
-    out = handle(request(kind, {"version": 1}), reviewing(), svc())
-    assert out.error is not None and out.error.code is ErrorCode.NOT_AVAILABLE
-    assert out.conv.state is State.AWAITING_REVIEW
-
-
 def test_an_unknown_request_type() -> None:
     out = handle(request("delete_everything"), reviewing(), svc())
     assert out.error is not None and out.error.code is ErrorCode.INVALID_REQUEST
