@@ -14,7 +14,7 @@ from campaign_agent.merger.patch_merger import (
     merge_patch,
 )
 
-TEXT = "Find companies building automotive infotainment on Android, minimum score 65"
+TEXT = "Find companies building automotive infotainment on Android, minimum score 65, drafts at 60"
 
 
 def op(path: str, value: Any = None, kind: str = "set", quote: str | None = None) -> PatchOp:
@@ -86,7 +86,7 @@ def test_edit_request_confirms_when_the_quote_is_real(ir: CampaignIR) -> None:
 
 def test_extraction_cannot_overwrite_a_confirmed_value(ir: CampaignIR) -> None:
     ir = run(ir, op("qualification.min_qualify", 70), source=Source.DIRECT).ir
-    r = run(ir, op("qualification.min_qualify", 40, quote="minimum score 65"))
+    r = run(ir, op("qualification.min_qualify", 60, quote="drafts at 60"))
     assert reasons(r) == [Reason.LOCKED]
     assert r.rejected[0].kept_value == 70
     assert r.ir.qualification.min_qualify == 70
@@ -94,7 +94,7 @@ def test_extraction_cannot_overwrite_a_confirmed_value(ir: CampaignIR) -> None:
 
 def test_whole_list_is_locked_once_confirmed(ir: CampaignIR) -> None:
     ir = run(ir, op("exclusions.companies", ["acme"], "add"), source=Source.DIRECT).ir
-    r = run(ir, op("exclusions.companies", ["globex"], "add", "automotive infotainment"))
+    r = run(ir, op("exclusions.companies", ["automotive"], "add", "automotive infotainment"))
     assert reasons(r) == [Reason.LOCKED]
     assert r.ir.exclusions.companies == ["acme"]
 
@@ -106,14 +106,14 @@ def test_user_can_correct_a_confirmed_value(ir: CampaignIR) -> None:
         assert r.ir.qualification.min_qualify == 55
     r = run(
         ir,
-        op("qualification.min_qualify", 60, quote="minimum score 65"),
+        op("qualification.min_qualify", 60, quote="drafts at 60"),
         source=Source.EDIT_REQUEST,
     )
     assert r.ir.qualification.min_qualify == 60
 
 
 def test_extraction_can_update_an_inferred_value(ir: CampaignIR) -> None:
-    ir = run(ir, op("qualification.min_qualify", 60, quote="minimum score 65")).ir
+    ir = run(ir, op("qualification.min_qualify", 60, quote="drafts at 60")).ir
     r = run(ir, op("qualification.min_qualify", 65, quote="minimum score 65"), turn=2)
     assert r.ir.qualification.min_qualify == 65
     assert r.ir.provenance["qualification.min_qualify"].source_turn == 2
@@ -324,3 +324,65 @@ def test_a_default_can_be_replaced_by_extraction(ir: CampaignIR) -> None:
     r = run(ir, op("qualification.min_qualify", 65, quote="minimum score 65"))
     assert r.ir.qualification.min_qualify == 65
     assert r.ir.provenance["qualification.min_qualify"].status is Status.INFERRED
+
+
+# --- the value must be what the quote says ---------------------------------------------------------------------------
+
+
+def test_a_real_quote_cannot_justify_an_invented_value() -> None:
+    """Seen with a real model: 'Also message them on LinkedIn' was cited for engine_rest_minutes = 60."""
+    text = "Find US companies. Also message them on LinkedIn."
+    r = run(
+        PatchIr(),
+        op("limits.engine_rest_minutes", 60, quote="Also message them on LinkedIn"),
+        text=text,
+    )
+    assert reasons(r) == [Reason.VALUE_NOT_IN_QUOTE]
+    assert r.ir.limits.engine_rest_minutes is None
+
+
+@pytest.mark.parametrize(
+    ("value", "quote", "ok"),
+    [
+        (500, "500-5,000 employees", True),
+        (5000, "500-5,000 employees", True),
+        (1000, "500-5,000 employees", False),
+        (65, "minimum score 65", True),
+        (0.7, "confidence of 70%", True),
+        (0.7, "confidence of 0.7", True),
+        (0.9, "confidence of 70%", False),
+        (500, "five hundred employees", False),  # number words are refused, not guessed
+        (["automotive"], "building automotive infotainment", True),
+        (["warehouse robot"], "building warehouse robots", True),
+        (["Android"], "on ANDROID", True),
+        (["in-vehicle infotainment system"], "automotive infotainment", True),
+        (["medical"], "building automotive infotainment", False),
+        (
+            ["automotive", "medical"],
+            "building automotive infotainment",
+            False,
+        ),  # every item needs support
+        (["cto"], "find the right decision makers", False),
+        (["US"], "Find US companies", True),
+        (["US"], "a business that is sustainable", False),  # 'us' inside other words is not a match
+        (True, "anything at all", True),  # booleans cannot be checked
+    ],
+)
+def test_value_in_quote(value: Any, quote: str, ok: bool) -> None:
+    from campaign_agent.merger.patch_merger import value_in_quote
+
+    assert value_in_quote(value, quote) is ok
+
+
+def test_user_sources_need_no_grounding() -> None:
+    r = run(PatchIr(), op("limits.engine_rest_minutes", 60), source=Source.DIRECT)
+    assert r.ir.limits.engine_rest_minutes == 60
+
+
+def test_a_grounded_op_still_applies() -> None:
+    r = run(PatchIr(), op("limits.max_pages_per_run", 65, quote="minimum score 65"))
+    assert r.ir.limits.max_pages_per_run == 65  # grounding checks the words, not the meaning
+
+
+def PatchIr() -> CampaignIR:
+    return new_ir("c1")

@@ -15,6 +15,7 @@ Rules (architecture doc sections 8 and 10):
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Literal
@@ -53,6 +54,7 @@ class Reason(StrEnum):
     CLEAR_NOT_ALLOWED = "clear_not_allowed"
     EVIDENCE_MISSING = "evidence_missing"
     EVIDENCE_NOT_FOUND = "evidence_not_found"
+    VALUE_NOT_IN_QUOTE = "value_not_in_quote"
     WRONG_OP = "wrong_op"
     NO_CHANGE = "no_change"
     NOT_SUGGESTIBLE = "not_suggestible"
@@ -113,6 +115,41 @@ _KIND_REASON: dict[str, str] = {
 
 def _norm(text: str) -> str:
     return " ".join(text.casefold().split())
+
+
+_WORD = re.compile(r"[a-z0-9]+")
+_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+
+
+def _stem(word: str) -> str:
+    return word if len(word) < 5 else word[:5]
+
+
+def _item_grounded(item: str, quote_words: set[str]) -> bool:
+    """A word of the value shares its first five letters with a word of the quote."""
+    stems = {_stem(w) for w in quote_words}
+    return any(_stem(token) in stems for token in _WORD.findall(item.casefold()))
+
+
+def value_in_quote(value: Any, quote: str) -> bool:
+    """Is the value something the quote actually says? Catches a real quote with an invented value.
+
+    Numbers must appear in the quote (commas in 5,000 are ignored; a fraction may be written as a
+    percentage). Words must share a stem with a word of the quote. Booleans cannot be checked.
+    Number words ("five hundred") do not count: such a value is rejected rather than guessed.
+    """
+    if isinstance(value, bool) or value is None:
+        return True
+    text = _norm(quote)
+    if isinstance(value, int | float):
+        numbers = set(_NUMBER.findall(re.sub(r"(?<=\d),(?=\d{3})", "", text)))
+        candidates = {f"{value:g}"}
+        if isinstance(value, float) and 0 < value < 1:
+            candidates.add(f"{round(value * 100):g}")
+        return bool(candidates & numbers)
+    words = set(_WORD.findall(text))
+    items = value if isinstance(value, list) else [value]
+    return all(_item_grounded(str(item), words) for item in items)
 
 
 class _Work:
@@ -220,6 +257,14 @@ def _apply_op(w: _Work, op: PatchOp) -> None:
         return
     if kind == "clear" and source not in _MAY_CLEAR:
         w.reject(op, Reason.CLEAR_NOT_ALLOWED, "only the user can clear a field")
+        return
+
+    if (
+        source in _NEEDS_QUOTE
+        and kind != "clear"
+        and not value_in_quote(op.value, op.evidence_quote or "")
+    ):
+        w.reject(op, Reason.VALUE_NOT_IN_QUOTE, "the value is not supported by the quoted words")
         return
 
     current = w.current(path)
