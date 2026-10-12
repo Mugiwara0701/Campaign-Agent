@@ -2,7 +2,7 @@
 
 How the dashboard talks to the Campaign Agent (CA) through the database, and how the CA works through it.
 This is the contract for the dashboard developer. Tables: [supabase-tables.md](supabase-tables.md); SQL:
-`migrations/0013_campaign_agent_tables.sql` and `0014_campaign_agent_worker.sql` (both drafts, not yet run on Supabase).
+`migrations/0013_campaign_agent_tables.sql`, `0014_campaign_agent_worker.sql` and `0015_campaign_agent_publish.sql` (drafts, not yet run on Supabase). Publishing is described in [publishing.md](publishing.md).
 
 ```text
 dashboard server ──insert──▶ campaign_request ──claim──▶ worker (CA machine) ──▶ campaign_state, campaign_version
@@ -17,7 +17,7 @@ Insert a row into `campaign_request`:
 | Column | Meaning |
 |---|---|
 | `campaign_id` | the dashboard's `campaign.id` |
-| `request_type` | `interpret`, `answer`, `edit`, `suggestion`, `discard` (and `approve`, `rollback` from M7) |
+| `request_type` | `interpret`, `answer`, `edit`, `suggestion`, `discard`, `approve`, `rollback`, `deactivate` |
 | `payload` | JSON, per type (below) |
 | `base_revision` | the `revision` the user was looking at; **required for `edit`**, optional elsewhere |
 | `requested_by` | the signed-in dashboard user (verified server side), at most 100 characters |
@@ -33,6 +33,9 @@ Requests of one campaign run strictly in order, one at a time.
 | `edit` | `{"text": "..."}` (in words) or `{"ops": [{"path": "qualification.min_qualify", "value": 55}]}` (a direct change; `null` clears; optional `"op": "add"/"remove"` for lists) | `AWAITING_REVIEW`, `VALIDATION_FAILED`, `CLARIFICATION_REQUIRED`; direct ops also `MODEL_UNAVAILABLE` |
 | `suggestion` | `{"suggestion_id": "s_..", "decision": "accept"}` or `"reject"` | review states |
 | `discard` | `{}` | any state except `PUBLISHED` and `DISCARDED` |
+| `approve` | `{"version": 3, "sha256": "..."}`: the version and text the user reviewed | `AWAITING_REVIEW`, or `PUBLISH_FAILED` (retry) |
+| `rollback` | `{"version": 1}`: a version that was approved before | any, once a version was approved |
+| `deactivate` | `{}` | any, once a version was approved |
 
 Answers and direct edits are all-or-nothing: if one is refused, none is applied.
 
@@ -44,8 +47,9 @@ notices, warnings, the YAML preview with validation results per level, and a fix
 approved in Slack). The working copy of the campaign (`ir`) and the conversation internals are not readable by the
 dashboard role. While a request runs, `current_state` shows `INTERPRETING`.
 
-`campaign_version` holds the stored candidates (YAML, sha256, validation report, not-applied list). Nothing is approved
-or active yet; that arrives in M7.
+`campaign_version` holds the stored versions (YAML, sha256, validation report, not-applied list, a snapshot of the
+campaign). A version with `approved_at` set was approved; the one pointed to by `campaign_state.active_version_id` is
+live. The dashboard sees which in `review_view` (`live`, `live_version`, `versions`).
 
 `ca_heartbeat` is a single row updated every cycle. If `last_seen` is old, the CA machine is down and requests wait.
 
@@ -63,7 +67,10 @@ A refused request has `status = failed` and one of these codes; it never changes
 | `needs_rephrase` | the model's reply could not be read, even after one repair |
 | `model_unavailable` | the model did not answer; the draft is kept and the state is `MODEL_UNAVAILABLE`. Send `interpret` again |
 | `invalid_answer` | an answer was refused; `result.errors` lists which and why |
-| `not_available` | `approve` and `rollback` until M7 |
+| `not_available` | `start_pipeline` on an approval: the Start button is the only way for now |
+| `stale_approval` | the approved version is not the latest candidate, or its text changed; `result.current` has the one to review |
+| `publish_blocked` | the candidate no longer passes the checks when approved; the campaign is `VALIDATION_FAILED`; `result.issues` says why |
+| `publish_failed` | the store did not accept the change; nothing was applied and the same approval can be sent again |
 | `internal_error` / `worker_crashed` | a bug or a repeatedly crashing worker, after all attempts |
 
 ## How the worker behaves
@@ -91,7 +98,7 @@ Both are checked by tests that run as the real roles against a real PostgreSQL.
 
 ## Decisions and limits
 
-- **Candidates are frozen in M6** (so a review state exists); **approval, publishing, rollback and stop are M7**.
+- Candidates are frozen when a campaign reaches review (M6); approval, going live, going back and stopping are in M7.
 - The migrations are **not applied to Supabase**. They were applied and tested on a throwaway PostgreSQL 16.
   Applying them to the shared database should be done by the owner, in order, after review.
 - The local test database is PostgreSQL, not SQLite: the claim query, roles and triggers are PostgreSQL features.

@@ -131,8 +131,95 @@ def test_the_agent_role_cannot_touch_anything_outside_its_job(pg_url, seeded, sq
         c.execute(sql)
 
 
-def test_an_approved_version_cannot_be_changed_even_by_the_agent(pg_url, seeded) -> None:  # type: ignore[no-untyped-def]
+# --- publishing is only possible through the functions ---------------------------------------------------------------------
+
+
+def version_args(db, cid):  # type: ignore[no-untyped-def]
+    with db.transaction() as c:
+        return c.execute(
+            "select version_no, sha256 from public.campaign_version where campaign_id = %s", (cid,)
+        ).fetchone()
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "update public.campaign_state set active_version_id = (select id from public.campaign_version limit 1)",
+        "update public.campaign_state set active_version_id = null",
+        "update public.campaign_version set approved_by = 'me', approved_at = now()",
+        "update public.campaign_version set approved_at = now()",
+        "insert into public.campaign_state (campaign_id, active_version_id)"
+        " select id, (select id from public.campaign_version limit 1) from public.campaign",
+    ],
+)
+def test_the_agent_cannot_go_live_or_approve_except_through_the_functions(
+    pg_url, seeded, sql: str
+) -> None:  # type: ignore[no-untyped-def]
+    with as_role(pg_url, "campaign_agent") as c, pytest.raises(DENIED):
+        c.execute(sql)
+
+
+def test_the_functions_do_the_allowed_thing_and_refuse_the_rest(pg_url, db, seeded) -> None:  # type: ignore[no-untyped-def]
+    v = version_args(db, seeded)
+    sha = v["sha256"]
     with as_role(pg_url, "campaign_agent") as c:
-        c.execute("update public.campaign_version set approved_by = 'u', approved_at = now()")
-        with pytest.raises(psycopg.errors.RaiseException):
-            c.execute("update public.campaign_version set approved_by = 'someone else'")
+        for args, state in (
+            ((seeded, 1, "0" * 64, "me"), "CA001"),  # the text differs
+            ((seeded, 2, sha, "me"), "CA002"),  # no such version
+            ((seeded, 1, sha, ""), "CA004"),  # nobody approved it
+            ((seeded, 1, sha, "x" * 101), "CA004"),
+        ):
+            with pytest.raises(psycopg.Error) as caught:
+                c.execute("select public.ca_publish(%s, %s, %s, %s)", args)
+            assert caught.value.sqlstate == state
+            c.rollback()
+            c.execute("set role campaign_agent")
+        with pytest.raises(psycopg.Error) as caught:
+            c.execute("select public.ca_activate(%s, 1)", (seeded,))  # never approved
+        assert caught.value.sqlstate == "CA003"
+        c.rollback()
+        c.execute("set role campaign_agent")
+        done = c.execute(
+            "select public.ca_publish(%s, 1, %s, 'priya@example.com')", (seeded, sha)
+        ).fetchone()[0]
+        assert done["version"] == 1 and done["superseded"] == []
+        c.commit()
+    with db.transaction() as c:
+        assert (
+            c.execute("select approved_by from public.campaign_version").fetchone()["approved_by"]
+            == "priya@example.com"
+        )
+
+
+def test_only_the_latest_candidate_can_be_approved(pg_url, db, seeded) -> None:  # type: ignore[no-untyped-def]
+    with db.transaction() as c:
+        c.execute(
+            "insert into public.campaign_version (campaign_id, version_no, overlay_yaml, sha256, ir_hash, contract_version)"
+            " values (%s, 2, 'x', repeat('b', 64), 'h', '1.0')",
+            (seeded,),
+        )
+    first = version_args(db, seeded)
+    with as_role(pg_url, "campaign_agent") as c, pytest.raises(psycopg.Error) as caught:
+        c.execute("select public.ca_publish(%s, 1, %s, 'me')", (seeded, first["sha256"]))
+    assert caught.value.sqlstate == "CA001"
+    assert caught.value.diag.message_detail == "2"  # the latest candidate is named
+
+
+@pytest.mark.parametrize("role", ["campaign_dashboard", "public"])
+def test_nobody_else_can_run_the_publishing_functions(pg_url, db, seeded, role: str) -> None:  # type: ignore[no-untyped-def]
+    with psycopg.connect(pg_url) as admin:
+        admin.execute("create role nobody_test nologin") if role == "public" and not admin.execute(
+            "select 1 from pg_roles where rolname = 'nobody_test'"
+        ).fetchone() else None
+        admin.commit()
+    target = "nobody_test" if role == "public" else role
+    with as_role(pg_url, target) as c:
+        for sql in (
+            "select public.ca_publish(gen_random_uuid(), 1, 'x', 'me')",
+            "select public.ca_activate(gen_random_uuid(), 1)",
+            "select public.ca_deactivate(gen_random_uuid())",
+        ):
+            with pytest.raises(DENIED):
+                c.execute(sql)
+            c.rollback()
+            c.execute(f"set role {target}")

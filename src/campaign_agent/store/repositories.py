@@ -239,6 +239,7 @@ def insert_candidate(
     contract_version: str,
     validation_report: dict[str, Any],
     not_applied: list[dict[str, Any]],
+    ir_snapshot: dict[str, Any] | None = None,
 ) -> Row:
     """Freeze a candidate. The same text as the newest unapproved candidate is reused, not stored again."""
     latest = latest_version(conn, campaign_id)
@@ -248,8 +249,8 @@ def insert_candidate(
         """
         insert into public.campaign_version
             (campaign_id, version_no, overlay_yaml, sha256, ir_hash, contract_version,
-             validation_report, not_applied)
-        values (%s, %s, %s, %s, %s, %s, %s, %s)
+             validation_report, not_applied, ir_snapshot)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         returning *
         """,
         (
@@ -261,10 +262,67 @@ def insert_candidate(
             contract_version,
             Jsonb(validation_report),
             Jsonb(not_applied),
+            Jsonb(ir_snapshot) if ir_snapshot is not None else None,
         ),
     ).fetchone()
     assert row is not None  # noqa: S101
     return row
+
+
+def get_version(conn: Conn, version_id: str) -> Row | None:
+    return conn.execute(
+        "select * from public.campaign_version where id = %s", (version_id,)
+    ).fetchone()
+
+
+def versions_summary(conn: Conn, campaign_id: str) -> list[Row]:
+    """Every version of a campaign, oldest first, with whether it is approved and whether it is live."""
+    return conn.execute(
+        """
+        select v.version_no, v.sha256, v.approved_by, v.approved_at, v.created_at,
+               (s.active_version_id = v.id) as live
+        from public.campaign_version v
+        left join public.campaign_state s on s.campaign_id = v.campaign_id
+        where v.campaign_id = %s
+        order by v.version_no
+        """,
+        (campaign_id,),
+    ).fetchall()
+
+
+def update_view(conn: Conn, campaign_id: str, review_view: dict[str, Any]) -> None:
+    conn.execute(
+        "update public.campaign_state set review_view = %s, updated_at = now() where campaign_id = %s",
+        (Jsonb(review_view), campaign_id),
+    )
+
+
+# --- publishing: only through the database functions, which enforce the rules ----------------------------------------
+
+
+def publish(
+    conn: Conn, campaign_id: str, version_no: int, sha256: str, approver: str
+) -> dict[str, Any]:
+    row = conn.execute(
+        "select public.ca_publish(%s, %s, %s, %s) as result",
+        (campaign_id, version_no, sha256, approver),
+    ).fetchone()
+    assert row is not None  # noqa: S101
+    return dict(row["result"])
+
+
+def activate(conn: Conn, campaign_id: str, version_no: int) -> dict[str, Any]:
+    row = conn.execute(
+        "select public.ca_activate(%s, %s) as result", (campaign_id, version_no)
+    ).fetchone()
+    assert row is not None  # noqa: S101
+    return dict(row["result"])
+
+
+def deactivate(conn: Conn, campaign_id: str) -> dict[str, Any]:
+    row = conn.execute("select public.ca_deactivate(%s) as result", (campaign_id,)).fetchone()
+    assert row is not None  # noqa: S101
+    return dict(row["result"])
 
 
 # --- heartbeat --------------------------------------------------------------------------------------------------------

@@ -103,6 +103,14 @@ class LastRequest(_V):
     code: str | None = None
 
 
+class VersionView(_V):
+    version: int
+    sha256: str
+    approved_by: str | None = None
+    approved_at: str | None = None
+    live: bool = False
+
+
 class ReviewView(_V):
     campaign_id: str
     state: str
@@ -116,6 +124,10 @@ class ReviewView(_V):
     candidate: CandidateView | None
     email_approval: str = EMAIL_APPROVAL
     last_request: LastRequest | None = None
+    # What the Marketing Agent runs: the live version of this campaign, if it is the live campaign.
+    live: bool = False
+    live_version: int | None = None
+    versions: tuple[VersionView, ...] = ()
 
     def with_candidate_version(self, version: int) -> "ReviewView":
         assert self.candidate is not None  # noqa: S101

@@ -4,8 +4,17 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-# What the dashboard may ask for. approve and rollback arrive with publishing (M7).
-REQUEST_TYPES = ("interpret", "answer", "edit", "suggestion", "approve", "discard", "rollback")
+# What the dashboard may ask for.
+REQUEST_TYPES = (
+    "interpret",
+    "answer",
+    "edit",
+    "suggestion",
+    "approve",
+    "discard",
+    "rollback",
+    "deactivate",
+)
 
 
 class ErrorCode(StrEnum):
@@ -19,6 +28,9 @@ class ErrorCode(StrEnum):
     MODEL_UNAVAILABLE = "model_unavailable"
     INVALID_ANSWER = "invalid_answer"
     NOT_AVAILABLE = "not_available"
+    STALE_APPROVAL = "stale_approval"
+    PUBLISH_BLOCKED = "publish_blocked"
+    PUBLISH_FAILED = "publish_failed"
     INTERNAL_ERROR = "internal_error"
     WORKER_CRASHED = "worker_crashed"
 
@@ -38,6 +50,9 @@ class RequestError(Exception):
     code: ErrorCode
     detail: str
     result: dict[str, Any] = field(default_factory=dict)
+    # Set when the refusal itself changes the conversation (a publish that was blocked). Otherwise a
+    # refused request leaves the conversation as it was.
+    conv: Any = None
 
     def __str__(self) -> str:
         return f"{self.code.value}: {self.detail}"
