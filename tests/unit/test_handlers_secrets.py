@@ -15,7 +15,9 @@ from tests.unit.helpers import COMPLETE_REPLY
 def run(name: str, detail: str):  # type: ignore[no-untyped-def]
     services = Services(Extractor(StubAdapter([COMPLETE_REPLY]), sleep=lambda _s: None))
     request = Request("r1", "c1", "interpret", {}, None, "u")
-    return handle(request, Workspace("c1", name, detail, None, ConversationState()), services), services
+    return handle(
+        request, Workspace("c1", name, detail, None, ConversationState()), services
+    ), services
 
 
 def test_a_secret_in_the_message_is_refused_and_not_copied_anywhere() -> None:
@@ -36,7 +38,10 @@ def test_a_secret_in_the_name_is_left_out_too() -> None:
 
 def test_an_ordinary_name_and_message_are_kept() -> None:
     out, _ = run("Retail kiosks", "Find kiosk builders in retail")
-    assert (out.ir.meta.name, out.ir.meta.description) == ("Retail kiosks", "Find kiosk builders in retail")
+    assert (out.ir.meta.name, out.ir.meta.description) == (
+        "Retail kiosks",
+        "Find kiosk builders in retail",
+    )
 
 
 def test_the_secret_check_alone() -> None:
