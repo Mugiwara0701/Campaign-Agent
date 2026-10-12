@@ -1,0 +1,18 @@
+[Unit]
+Description=Campaign Agent: turns dashboard requests into campaign versions for the Marketing Agent (polls the database)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Replaced with the real folder by `deploy/remote.sh install-service`.
+WorkingDirectory=%h/Campaign-Agent
+ExecStart=/bin/bash %h/Campaign-Agent/deploy/start-agent.sh
+Restart=on-failure
+RestartSec=15
+# SIGTERM: the worker finishes the request it is on, then exits. A request that is cut off is retried later.
+TimeoutStopSec=180
+Nice=10
+
+[Install]
+WantedBy=default.target

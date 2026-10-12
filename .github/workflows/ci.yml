@@ -79,6 +79,15 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest --cov --cov-report=term-missing
 
+  scripts:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # checked, never run: they log in to the office machine
+      - run: bash -n deploy/*.sh
+      - run: shellcheck deploy/*.sh
+
   docs:
     name: Markdown lint
     runs-on: ubuntu-latest

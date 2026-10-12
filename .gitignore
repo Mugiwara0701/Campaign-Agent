@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Where the office machine is (deploy/remote.sh init)
+.remote.env
