@@ -1,0 +1,4 @@
+[sqlfluff]
+dialect = postgres
+exclude_rules = LT05
+max_line_length = 100

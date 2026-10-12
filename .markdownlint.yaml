@@ -1,0 +1,9 @@
+default: true
+MD013: false   # long lines are fine in design docs
+MD033: false   # inline HTML (e.g. <br/> in mermaid)
+MD024:
+  siblings_only: true
+MD036: false
+MD060: false
+MD040: false   # untyped code fences are used for pseudo-code
+MD050: false   # __dunder__ names trigger false positives
