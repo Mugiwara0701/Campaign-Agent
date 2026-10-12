@@ -30,7 +30,9 @@ QUESTION = Question(
         ("c0, nonsense", {"question_id": "q_1", "value": "c0, nonsense"}),
     ],
 )
-def test_what_a_person_types_becomes_the_answer_the_dashboard_would_send(raw: str, expected: dict) -> None:  # type: ignore[type-arg]
+def test_what_a_person_types_becomes_the_answer_the_dashboard_would_send(
+    raw: str, expected: dict
+) -> None:  # type: ignore[type-arg]
     assert parse_answer(QUESTION, raw) == expected
 
 
@@ -46,7 +48,9 @@ def test_test_campaigns_are_recognisable() -> None:
 
 
 def test_the_test_client_refuses_to_run_off_the_office_machine(
-    monkeypatch: pytest.MonkeyPatch, tmp_path, capsys  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    capsys,  # type: ignore[no-untyped-def]
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("CA_ON_OFFICE_MACHINE", raising=False)
@@ -55,7 +59,9 @@ def test_the_test_client_refuses_to_run_off_the_office_machine(
 
 
 def test_the_test_client_needs_a_database_and_a_message(
-    monkeypatch: pytest.MonkeyPatch, tmp_path, capsys  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    capsys,  # type: ignore[no-untyped-def]
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CA_ON_OFFICE_MACHINE", "1")

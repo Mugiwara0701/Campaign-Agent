@@ -67,7 +67,9 @@ def format_view(view: ReviewView) -> list[str]:
     if view.candidate:
         c = view.candidate
         checks = ", ".join(f"L{lv.level} {lv.status}" for lv in c.levels)
-        lines.append(f"Candidate: version {c.version}   sha256 {c.sha256[:12]}...   checks: {checks}")
+        lines.append(
+            f"Candidate: version {c.version}   sha256 {c.sha256[:12]}...   checks: {checks}"
+        )
         issues = [i for lv in c.levels for i in lv.issues]
         lines.extend(f"  {i.severity}: {i.message}" for i in issues)
         lines.append("--- the YAML the Marketing Agent would get ---")
@@ -107,12 +109,18 @@ class DevClient:
         return str(row["id"])
 
     def send(
-        self, campaign_id: str, kind: str, payload: dict[str, Any] | None = None, base: int | None = None
+        self,
+        campaign_id: str,
+        kind: str,
+        payload: dict[str, Any] | None = None,
+        base: int | None = None,
     ) -> dict[str, Any]:
         with self.db.transaction() as conn:
             request = repo.enqueue_request(
                 conn,
-                repo.NewRequest(campaign_id, kind, REQUESTED_BY, uuid.uuid4().hex, payload or {}, base),
+                repo.NewRequest(
+                    campaign_id, kind, REQUESTED_BY, uuid.uuid4().hex, payload or {}, base
+                ),
             )
         return self._wait(str(request["id"]), campaign_id)
 
@@ -125,7 +133,8 @@ class DevClient:
                     "select * from public.campaign_request where id = %s", (request_id,)
                 ).fetchone()
                 state = conn.execute(
-                    "select current_state from public.campaign_state where campaign_id = %s", (campaign_id,)
+                    "select current_state from public.campaign_state where campaign_id = %s",
+                    (campaign_id,),
                 ).fetchone()
             assert row is not None  # noqa: S101
             if state and state["current_state"] != shown:
@@ -144,7 +153,8 @@ class DevClient:
     def view(self, campaign_id: str) -> ReviewView | None:
         with self.db.transaction() as conn:
             row = conn.execute(
-                "select review_view from public.campaign_state where campaign_id = %s", (campaign_id,)
+                "select review_view from public.campaign_state where campaign_id = %s",
+                (campaign_id,),
             ).fetchone()
         return ReviewView.model_validate(row["review_view"]) if row and row["review_view"] else None
 
@@ -179,7 +189,9 @@ class DevClient:
             hint = "a choice id, several separated by commas, " if q.choices else ""
             if q.allow_text:
                 hint += "your own words, "
-            raw = self.ask(f"answer ({hint}{'or skip' if q.skippable else 'it cannot be skipped'}): ")
+            raw = self.ask(
+                f"answer ({hint}{'or skip' if q.skippable else 'it cannot be skipped'}): "
+            )
             answers.append(parse_answer(q, raw))
         return answers
 
@@ -187,11 +199,18 @@ class DevClient:
         assert view.candidate is not None  # noqa: S101
         other = self._live_elsewhere(campaign_id)
         if other:
-            self.out(f"Another campaign is live: {other!r}. Approving replaces it (you can bring it back with rollback).")
+            self.out(
+                f"Another campaign is live: {other!r}. Approving replaces it (you can bring it back with rollback)."
+            )
             if self.ask("Type 'replace' to continue: ").strip() != "replace":
                 self.out("Not approved.")
                 return None
-        elif self.ask("Approving makes this campaign the live one. Type 'approve' to continue: ").strip() != "approve":
+        elif (
+            self.ask(
+                "Approving makes this campaign the live one. Type 'approve' to continue: "
+            ).strip()
+            != "approve"
+        ):
             self.out("Not approved.")
             return None
         return self.send(
@@ -218,7 +237,9 @@ class DevClient:
             if row is None:
                 break
         self.out("")
-        self.out(f"Test campaign {campaign_id} stays in the database. Remove all test campaigns: bash deploy/remote.sh try --clean")
+        self.out(
+            f"Test campaign {campaign_id} stays in the database. Remove all test campaigns: bash deploy/remote.sh try --clean"
+        )
         return 0
 
     def _next(self, campaign_id: str, view: ReviewView) -> dict[str, Any] | None:
@@ -231,18 +252,28 @@ class DevClient:
                 return self._approve(campaign_id, view)
             if choice in ("e", "edit"):
                 text = self.ask("What should change? ").strip()
-                return self.send(campaign_id, "edit", {"text": text}, base=view.revision) if text else None
+                return (
+                    self.send(campaign_id, "edit", {"text": text}, base=view.revision)
+                    if text
+                    else None
+                )
             if choice in ("d", "discard"):
                 return self.send(campaign_id, "discard")
             return None
         if view.state == "PUBLISHED":
-            self.out(f"\nVersion {view.live_version} is live." if view.live else "\nPublished, but not live.")
+            self.out(
+                f"\nVersion {view.live_version} is live."
+                if view.live
+                else "\nPublished, but not live."
+            )
             return None
         if view.state == "MODEL_UNAVAILABLE":
             if self.ask("\nThe model did not answer. Try again? [y/N]: ").strip().lower() == "y":
                 return self.send(campaign_id, "interpret")
         elif view.state == "DRAFT":
-            self.out("\nNothing was read from that message. Run the command again with another one.")
+            self.out(
+                "\nNothing was read from that message. Run the command again with another one."
+            )
         return None
 
     def clean(self) -> int:
@@ -256,10 +287,17 @@ class DevClient:
             return 0
         for r in found:
             self.out(f"  {r['campaign_name']}")
-        if self.ask(f"Delete these {len(found)} test campaign(s), with their requests and versions? Type 'clean': ").strip() != "clean":
+        if (
+            self.ask(
+                f"Delete these {len(found)} test campaign(s), with their requests and versions? Type 'clean': "
+            ).strip()
+            != "clean"
+        ):
             self.out("Cancelled. Nothing was deleted.")
             return 2
         with self.db.transaction() as conn:
-            conn.execute("delete from public.campaign where campaign_name like %s", (TEST_PREFIX + "%",))
+            conn.execute(
+                "delete from public.campaign where campaign_name like %s", (TEST_PREFIX + "%",)
+            )
         self.out(f"Removed {len(found)}.")
         return 0

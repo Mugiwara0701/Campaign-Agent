@@ -38,14 +38,19 @@ def _try(args: argparse.Namespace, settings: Settings) -> int:
     from campaign_agent.store.db import Database
 
     if os.environ.get("CA_ON_OFFICE_MACHINE") != "1":
-        print("Run this on the office machine: bash deploy/remote.sh try \"your message\"", file=sys.stderr)
+        print(
+            'Run this on the office machine: bash deploy/remote.sh try "your message"',
+            file=sys.stderr,
+        )
         return 2
     url = _admin_url(settings)
     if url is None:
         print("MIGRATE_DATABASE_URL (or DATABASE_URL) is not set", file=sys.stderr)
         return 2
     if not args.clean and not args.message:
-        print('Give a message: bash deploy/remote.sh try "Find ..."   (or --clean)', file=sys.stderr)
+        print(
+            'Give a message: bash deploy/remote.sh try "Find ..."   (or --clean)', file=sys.stderr
+        )
         return 2
     db = Database(url)
     try:
@@ -104,7 +109,9 @@ def _serve(command: str, settings: Settings) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="campaign_agent", description="Campaign Agent")
     parser.add_argument("command", choices=["start", "once", "migrate", "agent-password", "try"])
-    parser.add_argument("message", nargs="?", default=None, help="try: the campaign message to send")
+    parser.add_argument(
+        "message", nargs="?", default=None, help="try: the campaign message to send"
+    )
     parser.add_argument("--clean", action="store_true", help="try: remove the [CA-TEST] campaigns")
     parser.add_argument(
         "--plan", action="store_true", help="migrate: only show what would be applied"

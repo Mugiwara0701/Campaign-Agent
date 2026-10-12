@@ -13,7 +13,9 @@ pytestmark = pytest.mark.integration
 def make(db, w, answers):  # type: ignore[no-untyped-def]
     lines: list[str] = []
     typed = iter(answers)
-    client = DevClient(db, out=lines.append, ask=lambda _p: next(typed), tick=w.run_once, timeout_s=60)
+    client = DevClient(
+        db, out=lines.append, ask=lambda _p: next(typed), tick=w.run_once, timeout_s=60
+    )
     return client, lines
 
 
@@ -78,11 +80,16 @@ def test_approving_over_another_live_campaign_needs_a_typed_word(db) -> None:  #
     second.session(COMPLETE_TEXT)
     out = text(lines)
     assert "Another campaign is live" in out and "Not approved." in out
-    assert "Version" not in out.split("Not approved.")[-1] or "is live" not in out.split("Not approved.")[-1]
+    assert (
+        "Version" not in out.split("Not approved.")[-1]
+        or "is live" not in out.split("Not approved.")[-1]
+    )
     third, lines = make(db, w, ["a", "replace"])
     third.session(COMPLETE_TEXT)
     with db.transaction() as c:
-        live = c.execute("select count(*) as n from public.campaign_state where active_version_id is not null").fetchone()
+        live = c.execute(
+            "select count(*) as n from public.campaign_state where active_version_id is not null"
+        ).fetchone()
     assert live["n"] == 1  # still only one live campaign, now the newest
 
 
