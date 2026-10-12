@@ -69,9 +69,12 @@ class Worker:
             try:
                 did = self.run_once()
                 failures = 0
-            except psycopg.Error:
+            except psycopg.Error as exc:
                 failures += 1
-                log.exception("database error", extra={"failures": failures})
+                # The first line of the database's own message says why (wrong password, host unreachable,
+                # missing table). libpq never puts the password in it.
+                detail = str(exc).splitlines()[0][:240] if str(exc) else ""
+                log.exception("database error", extra={"failures": failures, "detail": detail})
                 self._sleep(min(60.0, 2.0**failures))
                 continue
             if not did:
