@@ -172,7 +172,7 @@ M0 → M1 → M2 ─┬→ M3 ─┐
 
 **Tasks**
 
-- Migrations for the four CA tables `campaign_request`, `campaign_state`, `campaign_version`, `ca_heartbeat`, all children of the dashboard's existing `public.campaign` (see [supabase-tables.md](supabase-tables.md); draft SQL in `migrations/0001_campaign_agent_tables.sql`). Run on Supabase and verified.
+- Migrations for the four CA tables `campaign_request`, `campaign_state`, `campaign_version`, `ca_heartbeat`, all children of the dashboard's existing `public.campaign` (see [supabase-tables.md](supabase-tables.md); draft SQL in `migrations/0013_campaign_agent_tables.sql`). Run on Supabase and verified.
 - DB roles: dashboard (insert requests, read views), Setup part, Publisher, each minimal. Mirror the MA's `0012_pipeline_api_role.sql`.
 - Poll loop: claim with `FOR UPDATE SKIP LOCKED`, one running request per campaign, idempotency key, `base_revision` concurrency, error codes in the request row.
 - Entry point `python -m campaign_agent start`; heartbeat row.
