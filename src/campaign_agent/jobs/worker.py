@@ -8,7 +8,7 @@ from importlib import metadata
 import psycopg
 
 from campaign_agent.jobs.handlers import Services
-from campaign_agent.jobs.manager import ManagerConfig, process_next
+from campaign_agent.jobs.manager import ManagerConfig, process_next, refresh_applied
 from campaign_agent.store import repositories as repo
 from campaign_agent.store.db import Database
 
@@ -19,6 +19,8 @@ log = logging.getLogger("campaign_agent.worker")
 # again quickly cannot help and can make it worse: repeated failures get a client blocked, sometimes everyone
 # behind the same address. So wait long, and keep the service quiet until someone fixes the URL.
 LOGIN_BACKOFF_S = 600.0
+# How often an idle worker looks at what the Marketing Agent reports and updates the live campaign's view.
+APPLIED_CHECK_S = 30.0
 _LOGIN_MARKERS = (
     "authentication failed",
     "tenant or user not found",
@@ -55,6 +57,7 @@ class Worker:
         model_name: str,
         poll_interval_s: float = 2.0,
         sleep: Callable[[float], None] = time.sleep,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._db = db
         self._svc = svc
@@ -63,6 +66,8 @@ class Worker:
         self._poll = poll_interval_s
         self._sleep = sleep
         self._stop = False
+        self._clock = clock
+        self._last_applied_check = float("-inf")
 
     def stop(self) -> None:
         self._stop = True
@@ -83,6 +88,9 @@ class Worker:
         did = process_next(self._db, self._svc, self._cfg)
         if did:
             self._beat("idle")
+        elif self._clock() - self._last_applied_check >= APPLIED_CHECK_S:
+            self._last_applied_check = self._clock()
+            refresh_applied(self._db)
         return did
 
     def _wait(self, seconds: float) -> None:

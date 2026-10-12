@@ -127,6 +127,9 @@ class ReviewView(_V):
     # What the Marketing Agent runs: the live version of this campaign, if it is the live campaign.
     live: bool = False
     live_version: int | None = None
+    # Has the Marketing Agent applied the live version? None = not known (nothing live, or it has not reported).
+    applied: bool | None = None
+    ma_error: str | None = None  # why the Marketing Agent refused the live version, as it reported it
     versions: tuple[VersionView, ...] = ()
 
     def with_candidate_version(self, version: int) -> "ReviewView":

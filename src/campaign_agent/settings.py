@@ -1,5 +1,6 @@
 """Settings from the environment or a git-ignored .env file. Secrets are never printed."""
 
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, SecretStr
@@ -30,6 +31,12 @@ class Settings(BaseSettings):
     lease_s: int = Field(default=1800, ge=60)
     max_attempts: int = Field(default=3, ge=1, le=10)
     worker_id: str = ""
+    # Level 6: a pinned checkout of the Marketing Agent on this machine, run with no network (see downstream.py).
+    ma_checkout: Path | None = None
+    ma_python: str = "python3"
+    ma_timeout_s: float = Field(default=60.0, gt=0, le=600)
+    # true: with no usable checkout nothing can be approved. false: level 6 is "skipped", visibly.
+    ma_required: bool = False
 
 
 def load_settings() -> Settings:
