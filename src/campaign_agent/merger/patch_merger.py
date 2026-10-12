@@ -36,6 +36,7 @@ class Source(StrEnum):
     EDIT_REQUEST = "edit_request"  # the model read an edit written in words
     DIRECT = "direct"  # the dashboard sent {path, value}
     ANSWER = "answer"  # the user answered a question
+    SYSTEM = "system"  # a deterministic fix: written as inferred, never over a confirmed value
 
 
 _USER_SOURCES = {Source.DIRECT, Source.ANSWER}
@@ -269,7 +270,7 @@ def _apply_op(w: _Work, op: PatchOp) -> None:
 
     current = w.current(path)
     status = w.provenance_of(path)
-    if status is Status.CONFIRMED and source is Source.EXTRACTION:
+    if status is Status.CONFIRMED and source in (Source.EXTRACTION, Source.SYSTEM):
         w.reject(
             op,
             Reason.LOCKED,

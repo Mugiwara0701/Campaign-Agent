@@ -227,3 +227,25 @@ def test_an_attempt_to_turn_approval_off_never_reaches_the_yaml() -> None:
     c = build_candidate(ir)
     assert "approval" not in dump_body(compile_overlay(ir).data)
     assert any(n.kind == "approval" for n in c.not_applied)
+
+
+# --- supplier wording ---------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "value", ["kiosk makers", "EV charger manufacturer", "OEM controllers", "wholesale kiosks"]
+)
+def test_l4_rejects_supplier_wording_in_anything_that_becomes_a_query(value: str) -> None:
+    result = l4({"project_context": {"products": [value]}})
+    assert result.status == "failed"
+    issue = next(i for i in result.issues if i.code == "supplier_wording")
+    assert issue.path == "project_context.products"
+    assert l4({"search": {"query_suffix": "best price"}}).status == "failed"
+    assert l4({"project_context": {"industries": [value]}}).status == "failed"
+
+
+def test_l4_allows_ordinary_words_that_only_contain_supplier_letters() -> None:
+    assert (
+        l4({"project_context": {"products": ["storefront display", "dealership kiosk"]}}).status
+        == "passed"
+    )

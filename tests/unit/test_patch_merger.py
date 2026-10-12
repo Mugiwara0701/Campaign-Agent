@@ -386,3 +386,17 @@ def test_a_grounded_op_still_applies() -> None:
 
 def PatchIr() -> CampaignIR:
     return new_ir("c1")
+
+
+# --- the system source (deterministic fixes) --------------------------------------------------------------------
+
+
+def test_a_system_fix_is_inferred_needs_no_quote_and_respects_a_confirmed_value() -> None:
+    ir = new_ir("c1")
+    r = run(ir, op("limits.max_pages_per_run", 180), source=Source.SYSTEM)
+    assert r.ir.limits.max_pages_per_run == 180
+    assert r.ir.provenance["limits.max_pages_per_run"].status is Status.INFERRED
+    confirmed = run(ir, op("limits.max_pages_per_run", 100), source=Source.DIRECT).ir
+    locked = run(confirmed, op("limits.max_pages_per_run", 180), source=Source.SYSTEM)
+    assert reasons(locked) == [Reason.LOCKED]
+    assert locked.ir.limits.max_pages_per_run == 100
