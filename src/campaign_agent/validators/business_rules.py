@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from campaign_agent.contract.model import MaxPagesPerRun, rule_violations
+from campaign_agent.contract.supplier_words import supplier_word
 from campaign_agent.contract.vocabularies import base_capabilities
 from campaign_agent.validators.report import Fix, Issue, LevelResult, level_result
 
@@ -19,6 +20,24 @@ _ = MaxPagesPerRun  # the cap above mirrors this alias
 
 def _norm(text: str) -> str:
     return " ".join(text.casefold().split())
+
+
+def _query_text(effective: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Every value the MA writes into a search query."""
+    project = effective["project_context"]
+    found = [
+        (f"project_context.{key}", item)
+        for key in (
+            "industries",
+            "products",
+            "technologies",
+            "hardware",
+            "engineering_requirements",
+        )
+        for item in project[key]
+    ]
+    found.append(("search.query_suffix", effective["search"]["query_suffix"]))
+    return found
 
 
 def check_business_rules(
@@ -54,6 +73,18 @@ def check_business_rules(
                 f"not in the base list: {unknown}",
             )
         )
+
+    for path, value in _query_text(effective):
+        if word := supplier_word(value):
+            issues.append(
+                Issue(
+                    LEVEL,
+                    "supplier_wording",
+                    path,
+                    f"'{value}' contains the supplier word '{word}'; the Marketing Agent "
+                    "refuses queries that look for sellers, so this would fail mid-run",
+                )
+            )
 
     for key in ("exclude_terms", "exclude_companies", "exclude_countries", "exclude_tlds"):
         missing = {_norm(x) for x in base[key]} - {_norm(x) for x in effective[key]}

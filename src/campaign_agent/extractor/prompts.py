@@ -69,7 +69,8 @@ Rules:
 6. A company or product the user names as a target is NOT an exclusion. Exclusions only for things to avoid.
 7. "research_needs": at most 3 terms whose meaning you do not know, each with a kind
    (term_meaning, product_categories_for_technology, industries_for_capability). Otherwise [].
-8. Statements about the user's own company go to organisation_context, never to the audience.
+8. Statements about the user's own company, and general preferences not tied to this campaign
+   ("we prefer small companies", "we usually avoid X"), go to organisation_context, never to the audience.
 
 Example
 <user_text>Find robotics companies building warehouse robots on Linux, skip anyone in France</user_text>
