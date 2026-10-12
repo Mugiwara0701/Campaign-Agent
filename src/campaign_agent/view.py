@@ -129,7 +129,9 @@ class ReviewView(_V):
     live_version: int | None = None
     # Has the Marketing Agent applied the live version? None = not known (nothing live, or it has not reported).
     applied: bool | None = None
-    ma_error: str | None = None  # why the Marketing Agent refused the live version, as it reported it
+    ma_error: str | None = (
+        None  # why the Marketing Agent refused the live version, as it reported it
+    )
     versions: tuple[VersionView, ...] = ()
 
     def with_candidate_version(self, version: int) -> "ReviewView":

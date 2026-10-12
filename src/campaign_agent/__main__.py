@@ -85,6 +85,7 @@ def _serve(command: str, settings: Settings) -> int:
         lease_s=settings.lease_s,
         max_attempts=settings.max_attempts,
     )
+
     def ma_status() -> MaStatus | None:
         with db.transaction() as conn:
             return fetch_status(conn)

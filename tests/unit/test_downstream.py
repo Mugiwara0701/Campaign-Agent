@@ -83,9 +83,12 @@ def test_no_way_to_cut_the_network_is_not_a_pass(tmp_path: Path) -> None:
 
     d = Downstream(tmp_path, runner=Cannot(RunResult(0, "q", "")))
     assert d.check("a: 1\n").status == "skipped"
-    assert Downstream(tmp_path, required=True, runner=Cannot(RunResult(0, "q", ""))).check(
-        "a: 1\n"
-    ).status == "failed"
+    assert (
+        Downstream(tmp_path, required=True, runner=Cannot(RunResult(0, "q", "")))
+        .check("a: 1\n")
+        .status
+        == "failed"
+    )
 
 
 def test_a_loader_rejection_stops_a_candidate_from_being_frozen(tmp_path: Path) -> None:
