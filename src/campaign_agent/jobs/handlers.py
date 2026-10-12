@@ -25,6 +25,7 @@ from campaign_agent.conversation.state_machine import (
 )
 from campaign_agent.conversation.turn import Notice, plan_turn
 from campaign_agent.extractor.extractor import ExtractionResult, Extractor, Status
+from campaign_agent.guard.input_guard import looks_like_secret
 from campaign_agent.ir.models import CampaignIR, new_ir
 from campaign_agent.ir.patch import IRPatch, PatchOp
 from campaign_agent.jobs.requests import ErrorCode, Request, RequestError
@@ -438,7 +439,11 @@ def progress_state(req: Request, ws: Workspace) -> State | None:
 
 def handle(req: Request, ws: Workspace, svc: Services) -> Outcome:
     """Run one request. Never raises for a bad request: the error is in the outcome."""
-    ir = ws.ir or new_ir(ws.campaign_id, ws.name[:200], ws.detail[:5000])
+    # The campaign's own name and message are copied into the stored campaign and shown back in the review.
+    # If one of them holds something shaped like a secret, it is left out: the text itself is refused later.
+    name = "" if looks_like_secret(ws.name) else ws.name[:200]
+    detail = "" if looks_like_secret(ws.detail) else ws.detail[:5000]
+    ir = ws.ir or new_ir(ws.campaign_id, name, detail)
     t = _Turn(ir=ir, conv=ws.conv, turn=ws.conv.turn + 1)
     error: RequestError | None = None
     try:
