@@ -131,6 +131,12 @@ credentials, `.git`, `.venv`, caches or build output. Files that exist only on t
 - **CPU-only machine:** a 9B model answers slowly (minutes per request). Raise `LLM_TIMEOUT_S` and `LEASE_S`, or use a
   smaller model for testing. Measuring this is the job of the evaluation milestone (M10).
 
+## F2. Where the code lives on the office machine
+
+By default in `~/Desktop/Campaign-Agent` (setting `REMOTE_DIR` in `.remote.env`, relative to the office user's home).
+To move it: change `REMOTE_DIR`, then run `setup`, `push-env`, `install-service` and `up` again (the `.venv` and `.env`
+are not copied by `sync`, and `install-service` points the service at the new folder). The old folder can then be deleted.
+
 ## F. Troubleshooting
 
 - **`Connection timed out`:** not on the same network. Use Tailscale, or check `ping` and the firewall

@@ -7,7 +7,7 @@
 #   bash deploy/remote.sh <command> ...           see the list below
 #
 # Settings come from the environment or .remote.env (git-ignored): REMOTE (user@host) and REMOTE_DIR
-# (default Campaign-Agent, relative to the remote home). The .env file is never part of `sync`: it is sent
+# (default Desktop/Campaign-Agent, relative to the remote home). The .env file is never part of `sync`: it is sent
 # only by `push-env` (or `deploy --env`), after showing what goes where and asking.
 set -euo pipefail
 
@@ -17,7 +17,7 @@ if [ -f .remote.env ]; then
   . ./.remote.env
 fi
 REMOTE="${REMOTE:-}"
-REMOTE_DIR="${REMOTE_DIR:-Campaign-Agent}"   # relative to the remote home directory
+REMOTE_DIR="${REMOTE_DIR:-Desktop/Campaign-Agent}"   # relative to the remote home directory
 SSH_OPTS=(-o ServerAliveInterval=30 -o ControlMaster=auto -o ControlPersist=10m -o "ControlPath=$HOME/.ssh/cm-%r@%h:%p")
 SERVICE=campaign-agent.service
 
