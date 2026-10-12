@@ -1,0 +1,4 @@
+# expect: project_context.name
+config_version: "1.0"
+project_context:
+  name: "ok\nexclude_companies: []"

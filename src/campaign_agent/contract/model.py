@@ -13,6 +13,7 @@ Each default and each bound is declared once: bounds in the aliases below, defau
 The numeric maxima are PROPOSED values chosen around the base config, not MA limits.
 """
 
+from dataclasses import dataclass
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
@@ -159,10 +160,16 @@ class LeadgenFile(_Strict):
 # --- campaign overlay (what the CA may emit) ---
 
 
+SafeName = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, max_length=200, pattern=r"^[\w .,'&/+()#-]*$"),
+]
+
+
 class OverlayProjectContext(_Strict):
     """Same as ProjectContext without the `hardware` alias: the CA writes technologies."""
 
-    name: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] = ""
+    name: SafeName = ""
     industries: TermList = []
     products: TermList = []
     technologies: TermList = []
@@ -236,7 +243,14 @@ class CampaignOverlay(_Strict):
         return self
 
 
-def check_rules(
+@dataclass(frozen=True)
+class RuleViolation:
+    code: str
+    path: str  # the key to change
+    message: str
+
+
+def rule_violations(
     *,
     min_qualify: int | None,
     min_draft: int | None,
@@ -244,20 +258,29 @@ def check_rules(
     pages_per_query: int | None,
     results_per_query: int | None,
     max_pages_per_run: int | None,
-) -> None:
+) -> list[RuleViolation]:
     """Cross-field rules from changes doc A6. A rule is skipped when one of its fields is None."""
+    found: list[RuleViolation] = []
     if min_qualify is not None and min_draft is not None and min_draft < min_qualify:
-        raise ValueError(
-            f"qualification.min_draft ({min_draft}) must be >= min_qualify ({min_qualify})"
+        found.append(
+            RuleViolation(
+                "draft_below_qualify",
+                "qualification.min_draft",
+                f"qualification.min_draft ({min_draft}) must be >= min_qualify ({min_qualify})",
+            )
         )
     if (
         results_per_query is not None
         and pages_per_query is not None
         and results_per_query < pages_per_query
     ):
-        raise ValueError(
-            f"search.results_per_query ({results_per_query}) must be >= "
-            f"pages_per_query ({pages_per_query})"
+        found.append(
+            RuleViolation(
+                "results_below_pages",
+                "search.results_per_query",
+                f"search.results_per_query ({results_per_query}) must be >= "
+                f"pages_per_query ({pages_per_query})",
+            )
         )
     if (
         queries_per_run is not None
@@ -265,7 +288,19 @@ def check_rules(
         and max_pages_per_run is not None
         and max_pages_per_run < queries_per_run * pages_per_query
     ):
-        raise ValueError(
-            f"limits.max_pages_per_run ({max_pages_per_run}) must be >= queries_per_run x "
-            f"pages_per_query ({queries_per_run * pages_per_query}), or late queries are starved"
+        found.append(
+            RuleViolation(
+                "pages_starved",
+                "limits.max_pages_per_run",
+                f"limits.max_pages_per_run ({max_pages_per_run}) must be >= queries_per_run x "
+                f"pages_per_query ({queries_per_run * pages_per_query}), "
+                "or late queries are starved",
+            )
         )
+    return found
+
+
+def check_rules(**values: int | None) -> None:
+    found = rule_violations(**values)
+    if found:
+        raise ValueError("; ".join(v.message for v in found))
