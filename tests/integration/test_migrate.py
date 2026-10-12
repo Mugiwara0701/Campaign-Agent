@@ -1,6 +1,7 @@
 """The migration runner, against a throwaway database that looks like the live one: it already has the
 Marketing Agent's schema_migrations rows, which must come out untouched."""
 
+import secrets
 from collections.abc import Iterator
 from pathlib import Path
 from urllib.parse import urlparse
@@ -136,7 +137,7 @@ def test_the_password_is_never_printed(url: str) -> None:
 
 def test_the_limited_role_gets_a_working_login(url: str) -> None:
     run(url, assume_yes=True)
-    password = "Test-Password_0123456789.abc"
+    password = secrets.token_urlsafe(24)  # random, URL-safe, and valid for the role
     lines: list[str] = []
     assert run_agent_password(url, prompt=lambda _p: password, out=lines.append) == 0
     text = "\n".join(lines)

@@ -25,7 +25,7 @@ def test_the_real_migrations_are_found_in_order() -> None:
 def test_a_misnamed_file_is_refused_instead_of_being_skipped_silently(tmp_path: Path) -> None:
     (tmp_path / "0001_ok.sql").write_text("select 1;")
     (tmp_path / "notes.sql").write_text("select 1;")
-    with pytest.raises(ValueError, match="notes.sql"):
+    with pytest.raises(ValueError, match=r"notes\.sql"):
         discover(tmp_path)
 
 
