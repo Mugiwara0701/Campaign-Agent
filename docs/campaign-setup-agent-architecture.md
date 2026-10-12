@@ -468,7 +468,7 @@ State mapping: the dashboard keeps no private copy of campaign truth. Edits go t
 
 ## 13. Backend architecture
 
-Modular monolith, Python 3.11+: FastAPI, Pydantic v2, PyYAML (`safe_load`/`safe_dump`), `httpx`, a job runner, Postgres.
+Modular monolith, Python 3.12+: FastAPI, Pydantic v2, PyYAML (`safe_load`/`safe_dump`), `httpx`, a job runner, Postgres.
 
 | Candidate | Decision |
 |---|---|

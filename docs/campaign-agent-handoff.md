@@ -125,7 +125,7 @@ Business rules the CA's validator must enforce: `min_draft >= min_qualify`; `max
 
 ## 4. Recommended architecture [proposal]
 
-**Modular monolith**: Python 3.11+, FastAPI, Pydantic v2, PyYAML (`safe_load`/`safe_dump` only), httpx, in-process job workers with jobs persisted in Postgres, Supabase Postgres as store and hand-off channel (SQLite for local dev only). No vector DB, no agent framework, no microservices.
+**Modular monolith**: Python 3.12+, FastAPI, Pydantic v2, PyYAML (`safe_load`/`safe_dump` only), httpx, in-process job workers with jobs persisted in Postgres, Supabase Postgres as store and hand-off channel (SQLite for local dev only). No vector DB, no agent framework, no microservices.
 
 ### 4.1 Pipeline per user turn
 

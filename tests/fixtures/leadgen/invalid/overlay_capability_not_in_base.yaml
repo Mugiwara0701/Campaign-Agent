@@ -1,0 +1,4 @@
+# expect: not in the base list
+config_version: "1.0"
+search:
+  capabilities: [quantum networking]

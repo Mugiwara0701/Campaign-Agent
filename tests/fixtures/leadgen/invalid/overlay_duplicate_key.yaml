@@ -1,0 +1,5 @@
+# expect: duplicate key
+config_version: "1.0"
+qualification:
+  min_qualify: 50
+  min_qualify: 90

@@ -1,0 +1,5 @@
+# expect: min_draft
+config_version: "1.0"
+qualification:
+  min_qualify: 70
+  min_draft: 60

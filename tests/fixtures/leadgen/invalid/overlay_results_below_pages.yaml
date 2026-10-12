@@ -1,0 +1,5 @@
+# expect: results_per_query
+config_version: "1.0"
+search:
+  results_per_query: 3
+  pages_per_query: 6

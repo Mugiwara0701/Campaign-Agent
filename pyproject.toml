@@ -7,7 +7,7 @@ name = "campaign-agent"
 version = "0.0.0"
 description = "Turns a plain-language campaign description into a validated, versioned Marketing Agent campaign configuration."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.110",
     "pydantic>=2.6",
@@ -37,7 +37,7 @@ campaign_agent = ["py.typed", "contract/*.yaml"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
@@ -62,7 +62,7 @@ select = [
 quote-style = "double"
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 mypy_path = "src"
 packages = ["campaign_agent"]

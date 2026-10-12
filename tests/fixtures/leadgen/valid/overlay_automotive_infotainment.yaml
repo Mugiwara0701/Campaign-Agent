@@ -1,0 +1,21 @@
+config_version: "1.0"
+project_context:
+  name: Automotive infotainment on Android
+  industries: [automotive]
+  products: [in-vehicle infotainment system, digital cockpit, automotive head unit]
+  technologies: [Android Automotive]
+  engineering_requirements: [AOSP customization, Android HAL]
+search:
+  capabilities: [AOSP customization, Android HAL, Android BSP]
+  queries_per_run: 12
+  pages_per_query: 5
+qualification:
+  min_qualify: 55
+  min_draft: 65
+  accept_hiring_signals: true
+exclude_companies: [harman]
+exclude_countries: [france]
+exclude_tlds: [.fr]
+limits:
+  max_new_leads_per_run: 8
+  max_pages_per_run: 100
