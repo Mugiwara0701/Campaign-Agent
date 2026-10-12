@@ -45,7 +45,19 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
-      - run: mypy
+      # mypy's findings are also reported as annotations, so a failure can be read without the log
+      - run: |
+          set +e
+          mypy --output json > mypy-output.json
+          status=$?
+          python - <<'PY'
+          import json
+          for line in open("mypy-output.json"):
+              d = json.loads(line)
+              msg = d["message"].replace("%", "%25").replace("\n", "%0A")
+              print(f"::error file={d['file']},line={d['line']},title=mypy {d['code']}::{msg}")
+          PY
+          exit $status
 
   test:
     name: Tests (Python ${{ matrix.python-version }})

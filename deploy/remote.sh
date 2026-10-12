@@ -40,6 +40,8 @@ Commands:
   migrate [--plan]      apply the SQL files in migrations/ to the database from the office machine's .env.
                         Shows what it would do and asks you to type 'migrate' first; --plan only shows it
   agent-password        set the login password of the limited campaign_agent role (asked there, not shown)
+  try "message"         test the agent without the dashboard: sends your message as a test campaign, shows what the
+                        agent made, lets you answer its questions, edit and approve. try --clean removes the tests
   agent <args>          python -m campaign_agent <args> there, no sync   (e.g. agent once)
   model [name]          pull the model on the office machine (default: LLM_MODEL from the remote .env)
   test                  sync, then run the tests there (database tests need TEST_DATABASE_URL there)
@@ -181,6 +183,10 @@ case "$cmd" in
   migrate)
     do_sync   # the migrations go with the code
     remote_run .venv/bin/python -m campaign_agent migrate "$@"
+    ;;
+  try)
+    do_sync   # the test client goes with the code
+    remote_run env CA_ON_OFFICE_MACHINE=1 .venv/bin/python -m campaign_agent try "$@"
     ;;
   agent-password)
     need_remote

@@ -61,6 +61,11 @@ def _latin_share(text: str) -> float:
     return latin / len(letters)
 
 
+def looks_like_secret(text: str) -> bool:
+    """Does the text contain something shaped like a key, token or password?"""
+    return any(pattern.search(text) for pattern in _SECRET_PATTERNS.values())
+
+
 def check_input(text: str, kind: Kind = "message") -> GuardResult:
     limit = MAX_CHARS if kind == "message" else MAX_EDIT_CHARS
     if len(text) > limit * 4:  # do not even normalise something absurd
