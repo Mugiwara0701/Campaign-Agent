@@ -26,4 +26,11 @@ def test_a_refused_login_waits_ten_minutes_however_many_times_it_failed(detail: 
 @pytest.mark.parametrize("detail", GLITCHES)
 def test_other_database_errors_keep_the_short_growing_wait(detail: str) -> None:
     assert not is_login_problem(detail)
-    assert [backoff_for(detail, n) for n in (1, 2, 3, 6, 7, 20)] == [2.0, 4.0, 8.0, 60.0, 60.0, 60.0]
+    assert [backoff_for(detail, n) for n in (1, 2, 3, 6, 7, 20)] == [
+        2.0,
+        4.0,
+        8.0,
+        60.0,
+        60.0,
+        60.0,
+    ]

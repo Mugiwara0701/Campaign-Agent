@@ -28,7 +28,9 @@ from campaign_agent.store.db import Conn, Database
 
 LOCK_KEY = 727_274  # arbitrary; the same for every runner of this project's migrations
 _NAME = re.compile(r"^\d{4}_[a-z0-9_]+\.sql$")
-_PASSWORD = re.compile(r"^[A-Za-z0-9._~-]{20,100}$")  # URL-safe, so it can go into DATABASE_URL as it is
+_PASSWORD = re.compile(
+    r"^[A-Za-z0-9._~-]{20,100}$"
+)  # URL-safe, so it can go into DATABASE_URL as it is
 
 
 class MigrationError(RuntimeError):
@@ -101,7 +103,10 @@ def applied_names(db: Database) -> list[str]:
         row = conn.execute("select to_regclass('public.schema_migrations') as t").fetchone()
         if row is None or row["t"] is None:
             return []
-        return [r["name"] for r in conn.execute("select name from public.schema_migrations order by name")]
+        return [
+            r["name"]
+            for r in conn.execute("select name from public.schema_migrations order by name")
+        ]
 
 
 def pending(db: Database, migrations: list[Migration]) -> list[Migration]:
@@ -125,7 +130,9 @@ def apply_one(db: Database, migration: Migration) -> bool:
                 (migration.name,),
             )
     except psycopg.Error as exc:
-        raise MigrationError(migration.name, type(exc).__name__, str(exc).splitlines()[0][:300]) from exc
+        raise MigrationError(
+            migration.name, type(exc).__name__, str(exc).splitlines()[0][:300]
+        ) from exc
     return True
 
 
@@ -136,14 +143,20 @@ def valid_password(password: str) -> bool:
 def set_agent_password(db: Database, password: str) -> None:
     """Give the limited campaign_agent role a login and this password. The role comes from migration 0013."""
     if not valid_password(password):
-        raise ValueError("the password must be 20 to 100 characters from A-Z a-z 0-9 . _ ~ - (it goes into a URL)")
+        raise ValueError(
+            "the password must be 20 to 100 characters from A-Z a-z 0-9 . _ ~ - (it goes into a URL)"
+        )
     try:
         with db.transaction() as conn:
             conn.execute(
-                sql.SQL("alter role campaign_agent with login password {}").format(sql.Literal(password))
+                sql.SQL("alter role campaign_agent with login password {}").format(
+                    sql.Literal(password)
+                )
             )
     except psycopg.errors.UndefinedObject as exc:
-        raise MigrationError("campaign_agent", "UndefinedObject", "the role does not exist: run migrate first") from exc
+        raise MigrationError(
+            "campaign_agent", "UndefinedObject", "the role does not exist: run migrate first"
+        ) from exc
 
 
 # --- command line ----------------------------------------------------------------------------------------------------------
@@ -179,7 +192,9 @@ def run_migrate(
             if interactive is None:
                 interactive = sys.stdin.isatty()
             if not interactive:
-                out("Not applying: nothing can be asked here. Use --yes, or run it from a terminal.")
+                out(
+                    "Not applying: nothing can be asked here. Use --yes, or run it from a terminal."
+                )
                 return 2
             if ask("This changes that database. Type 'migrate' to apply: ").strip() != "migrate":
                 out("Cancelled. Nothing was changed.")
@@ -189,7 +204,9 @@ def run_migrate(
                 applied = apply_one(db, m)
             except MigrationError as exc:
                 out(f"FAILED  {exc}")
-                out("That migration was rolled back as a whole; the ones before it stay applied. Nothing after it ran.")
+                out(
+                    "That migration was rolled back as a whole; the ones before it stay applied. Nothing after it ran."
+                )
                 return 1
             out(f"applied {m.name}" if applied else f"skipped {m.name} (recorded meanwhile)")
         out("Done.")
@@ -205,8 +222,10 @@ def run_agent_password(
     out: Callable[[str], None] = print,
 ) -> int:
     out(f"database: {describe(url)}")
-    out("Sets the login password of the limited 'campaign_agent' role (the worker uses it, not the owner).")
-    out("Make a good one with:  python3 -c \"import secrets; print(secrets.token_urlsafe(24))\"")
+    out(
+        "Sets the login password of the limited 'campaign_agent' role (the worker uses it, not the owner)."
+    )
+    out('Make a good one with:  python3 -c "import secrets; print(secrets.token_urlsafe(24))"')
     first = prompt("New password (not shown): ")
     if not valid_password(first):
         out("Not set: use 20 to 100 characters from A-Z a-z 0-9 . _ ~ -")
@@ -222,7 +241,8 @@ def run_agent_password(
         return 1
     finally:
         db.close()
-    out("Done. Put it in the .env that goes to the office machine, then: bash deploy/remote.sh push-env && bash deploy/remote.sh up")
+    out(
+        "Done. Put it in the .env that goes to the office machine, then: bash deploy/remote.sh push-env && bash deploy/remote.sh up"
+    )
     out(f"  DATABASE_URL={agent_url_hint(url)}")
     return 0
-

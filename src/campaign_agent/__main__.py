@@ -45,7 +45,9 @@ def _serve(command: str, settings: Settings) -> int:
     if settings.database_url is None:
         print("DATABASE_URL is not set", file=sys.stderr)
         return 2
-    extractor = Extractor(make_adapter(settings), params=GenParams(timeout_s=settings.llm_timeout_s))
+    extractor = Extractor(
+        make_adapter(settings), params=GenParams(timeout_s=settings.llm_timeout_s)
+    )
     db = Database(settings.database_url.get_secret_value())
     cfg = ManagerConfig(
         worker_id=settings.worker_id or f"{socket.gethostname()}-{os.getpid()}",
@@ -78,9 +80,13 @@ def _serve(command: str, settings: Settings) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="campaign_agent", description="Campaign Agent")
     parser.add_argument("command", choices=["start", "once", "migrate", "agent-password"])
-    parser.add_argument("--plan", action="store_true", help="migrate: only show what would be applied")
+    parser.add_argument(
+        "--plan", action="store_true", help="migrate: only show what would be applied"
+    )
     parser.add_argument("--yes", action="store_true", help="migrate: apply without asking")
-    parser.add_argument("--dir", type=Path, default=None, help="migrate: the folder with the .sql files")
+    parser.add_argument(
+        "--dir", type=Path, default=None, help="migrate: the folder with the .sql files"
+    )
     args = parser.parse_args(argv)
     settings = load_settings()
     if args.command in ("migrate", "agent-password"):

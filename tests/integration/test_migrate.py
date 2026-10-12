@@ -26,8 +26,12 @@ def url(pg_url: str) -> Iterator[str]:
         admin.execute(f"create database {DB}")
     target = f"{base}/{DB}"
     with psycopg.connect(target, autocommit=True) as conn:
-        conn.execute("create table public.campaign (id uuid primary key default gen_random_uuid(), campaign_name text not null, campaign_detail text)")
-        conn.execute("create table public.schema_migrations (name text primary key, applied_at timestamptz not null default now())")
+        conn.execute(
+            "create table public.campaign (id uuid primary key default gen_random_uuid(), campaign_name text not null, campaign_detail text)"
+        )
+        conn.execute(
+            "create table public.schema_migrations (name text primary key, applied_at timestamptz not null default now())"
+        )
         for name in MA_ROWS:
             conn.execute("insert into public.schema_migrations (name) values (%s)", (name,))
     yield target
@@ -54,24 +58,38 @@ def test_a_plan_only_reads(url: str) -> None:
     assert code == 0
     for name in REAL:
         assert name in text
-    assert query(url, "select to_regclass('public.campaign_request')") == [(None,)]  # nothing was created
+    assert query(url, "select to_regclass('public.campaign_request')") == [
+        (None,)
+    ]  # nothing was created
     assert len(query(url, "select name from public.schema_migrations")) == len(MA_ROWS)
 
 
 def test_applying_creates_the_tables_and_records_each_file(url: str) -> None:
     code, text = run(url, assume_yes=True)
     assert code == 0 and "Done." in text
-    tables = {r[0] for r in query(url, "select tablename from pg_tables where schemaname = 'public'")}
+    tables = {
+        r[0] for r in query(url, "select tablename from pg_tables where schemaname = 'public'")
+    }
     assert {"campaign_request", "campaign_state", "campaign_version", "ca_heartbeat"} <= tables
     recorded = [r[0] for r in query(url, "select name from public.schema_migrations order by name")]
     assert recorded == sorted(MA_ROWS + REAL)
-    assert all(r[0] is not None for r in query(url, "select applied_at from public.schema_migrations"))
+    assert all(
+        r[0] is not None for r in query(url, "select applied_at from public.schema_migrations")
+    )
 
 
 def test_the_marketing_agents_rows_are_left_alone(url: str) -> None:
-    before = query(url, "select name, applied_at from public.schema_migrations where name = any(%s) order by name", MA_ROWS)
+    before = query(
+        url,
+        "select name, applied_at from public.schema_migrations where name = any(%s) order by name",
+        MA_ROWS,
+    )
     run(url, assume_yes=True)
-    after = query(url, "select name, applied_at from public.schema_migrations where name = any(%s) order by name", MA_ROWS)
+    after = query(
+        url,
+        "select name, applied_at from public.schema_migrations where name = any(%s) order by name",
+        MA_ROWS,
+    )
     assert before == after
 
 
@@ -89,11 +107,16 @@ def test_files_that_were_applied_by_hand_are_just_recorded(url: str) -> None:
             conn.execute(m.sql)  # what someone pasting them into the SQL editor does
     code, _ = run(url, assume_yes=True)
     assert code == 0
-    assert [r[0] for r in query(url, "select name from public.schema_migrations where name = any(%s)", REAL)] != []
+    assert [
+        r[0]
+        for r in query(url, "select name from public.schema_migrations where name = any(%s)", REAL)
+    ] != []
     assert len(query(url, "select name from public.schema_migrations")) == len(MA_ROWS) + len(REAL)
 
 
-def test_a_failing_migration_is_undone_as_a_whole_and_stops_the_rest(url: str, tmp_path: Path) -> None:
+def test_a_failing_migration_is_undone_as_a_whole_and_stops_the_rest(
+    url: str, tmp_path: Path
+) -> None:
     (tmp_path / "0001_ok.sql").write_text("create table public.t1 (a int);")
     (tmp_path / "0002_bad.sql").write_text("create table public.t2 (a int); select 1 / 0;")
     (tmp_path / "0003_never.sql").write_text("create table public.t3 (a int);")
@@ -101,7 +124,9 @@ def test_a_failing_migration_is_undone_as_a_whole_and_stops_the_rest(url: str, t
     assert code == 1
     assert "FAILED" in text and "0002_bad.sql" in text and "DivisionByZero" in text
     assert query(url, "select to_regclass('public.t1')") == [("t1",)]  # the one before stays
-    assert query(url, "select to_regclass('public.t2')") == [(None,)]  # the failing one left nothing behind
+    assert query(url, "select to_regclass('public.t2')") == [
+        (None,)
+    ]  # the failing one left nothing behind
     assert query(url, "select to_regclass('public.t3')") == [(None,)]  # and nothing after it ran
     recorded = {r[0] for r in query(url, "select name from public.schema_migrations")}
     assert "0001_ok.sql" in recorded
@@ -129,7 +154,9 @@ def test_the_password_is_never_printed(url: str) -> None:
     _, text = run(url, plan_only=True)
     assert password
     assert f":{password}@" not in text
-    assert f"{password}@" not in text  # (the database is called ca_migrate_test, so the bare word may appear)
+    assert (
+        f"{password}@" not in text
+    )  # (the database is called ca_migrate_test, so the bare word may appear)
 
 
 # --- the password of the limited role -----------------------------------------------------------------------------------------
@@ -147,7 +174,9 @@ def test_the_limited_role_gets_a_working_login(url: str) -> None:
     login = f"postgresql://campaign_agent:{password}@{parsed.hostname}:{parsed.port}/{DB}"
     with psycopg.connect(login) as conn:
         assert conn.execute("select current_user").fetchone() == ("campaign_agent",)
-        assert conn.execute("select count(*) from public.campaign").fetchone() == (0,)  # it can do its job
+        assert conn.execute("select count(*) from public.campaign").fetchone() == (
+            0,
+        )  # it can do its job
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             conn.execute("select * from public.schema_migrations")  # and nothing else
 
@@ -168,7 +197,9 @@ def test_the_command_reads_migrate_database_url_before_database_url(
     url: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_path)  # no .env here
-    monkeypatch.setenv("DATABASE_URL", "postgresql://nobody:x@127.0.0.1:1/none")  # would fail if it were used
+    monkeypatch.setenv(
+        "DATABASE_URL", "postgresql://nobody:x@127.0.0.1:1/none"
+    )  # would fail if it were used
     monkeypatch.setenv("MIGRATE_DATABASE_URL", url)
     assert main(["migrate", "--plan"]) == 0
     out = capsys.readouterr().out
