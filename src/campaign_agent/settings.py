@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # Qwen3-style models think before answering; for extraction that only costs time.
     llm_think: bool = False
     database_url: SecretStr | None = None
+    # Only for `migrate` and `agent-password`, which need the database OWNER. Optional: when it is not set they
+    # use DATABASE_URL. Keep it out of the .env of a machine where the worker runs, once the migrations are done.
+    migrate_database_url: SecretStr | None = None
     poll_interval_s: float = Field(default=2.0, gt=0, le=60)
     # How long a request may stay "processing" before another worker may take it over. It must be longer
     # than the slowest request: a few model calls at LLM_TIMEOUT_S each.

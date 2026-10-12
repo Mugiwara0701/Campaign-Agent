@@ -37,6 +37,9 @@ Commands:
   down                  stop the service
   status                is the service running, is the model server up, the last log lines
   logs [-f]             the service log (-f: follow it live)
+  migrate [--plan]      apply the SQL files in migrations/ to the database from the office machine's .env.
+                        Shows what it would do and asks you to type 'migrate' first; --plan only shows it
+  agent-password        set the login password of the limited campaign_agent role (asked there, not shown)
   agent <args>          python -m campaign_agent <args> there, no sync   (e.g. agent once)
   model [name]          pull the model on the office machine (default: LLM_MODEL from the remote .env)
   test                  sync, then run the tests there (database tests need TEST_DATABASE_URL there)
@@ -174,6 +177,14 @@ case "$cmd" in
     else
       rssh "journalctl --user -u $SERVICE -n 100 --no-pager -o cat"
     fi
+    ;;
+  migrate)
+    do_sync   # the migrations go with the code
+    remote_run .venv/bin/python -m campaign_agent migrate "$@"
+    ;;
+  agent-password)
+    need_remote
+    remote_run .venv/bin/python -m campaign_agent agent-password
     ;;
   agent)
     need_remote

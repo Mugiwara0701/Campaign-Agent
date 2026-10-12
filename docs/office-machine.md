@@ -60,11 +60,45 @@ the laptop: no model, no tests, no database. This is the same pattern as the Mar
 | `LLM_MODEL` | for example `qwen3.5:9b`; `bash deploy/remote.sh model` pulls it |
 | `LLM_TIMEOUT_S` | on a CPU-only machine raise it (a call can take minutes); see below |
 | `LLM_THINK` | `false` (the default) for structured extraction |
+| `MIGRATE_DATABASE_URL` | optional, the database **owner**; only `migrate` and `agent-password` use it. Remove it after migrating |
 
 `push-env` checks `DATABASE_URL` before sending: if it is the owner role (`postgres`, `postgres.<ref>`) it warns and
 makes you type `owner` to continue. The password is never printed. The old `.env` on the office machine is kept as
 `.env.bak` (mode 600). The `campaign_agent` role is created by migration `0013` and needs a password set by whoever owns
 the database; that has to happen before the service can log in.
+
+## B2. Applying the database migrations
+
+The tables the worker needs are created by the SQL files in `migrations/`. From the laptop, this sends the code and
+runs the migration on the **office machine**, using the connection string in that machine's `.env`:
+
+```bash
+bash deploy/remote.sh migrate --plan     # only shows which files would be applied; changes nothing
+bash deploy/remote.sh migrate            # shows them, then asks you to type 'migrate' before it applies anything
+```
+
+- It is built for the shared live database: it prints the target (`user@host:port/database`, never the password), lists
+  exactly what it will apply, and does nothing until you type the word `migrate`.
+- Each file is applied in **one transaction together with its record** in `public.schema_migrations`, the table the
+  Marketing Agent already uses. If a file fails it is undone as a whole, the ones before it stay applied, and nothing after
+  it runs. Existing rows (the Marketing Agent's) are never touched.
+- Running it again does nothing ("Up to date"). A new file added later (for example `0015` once M7 is merged) is the
+  only thing it applies next time. Never edit a file that was already applied; add a new one.
+- The files are safe to run twice, so ones that someone already pasted into the SQL editor are just recorded.
+- It needs the database **owner**, because it creates a role, functions and grants. Put the owner string in
+  `MIGRATE_DATABASE_URL` in the office `.env` (it is used first); otherwise `DATABASE_URL` is used. **After migrating,
+  switch `DATABASE_URL` to the limited login (below) and remove `MIGRATE_DATABASE_URL`**, so the worker machine does not
+  keep owner credentials.
+
+Then give the limited `campaign_agent` role its login password (asked on the office machine and never shown):
+
+```bash
+bash deploy/remote.sh agent-password
+```
+
+It prints the `DATABASE_URL=` line to use (host, port and project reference filled in; the password is for you to
+paste). Put that in the `.env` that goes to the office machine, then `bash deploy/remote.sh push-env` and
+`bash deploy/remote.sh up`.
 
 ## C. Daily use (from the laptop)
 
