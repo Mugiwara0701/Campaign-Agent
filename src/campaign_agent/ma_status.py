@@ -6,6 +6,7 @@ publish, because a campaign published while the MA is offline is applied when it
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import psycopg
@@ -69,9 +70,11 @@ def parse_status(row: dict[str, Any] | None) -> MaStatus | None:
         )
     reported = row.get("reported_at")
     return MaStatus(
-        supported_contract_versions=tuple(str(v) for v in row.get("supported_contract_versions") or ()),
+        supported_contract_versions=tuple(
+            str(v) for v in row.get("supported_contract_versions") or ()
+        ),
         current=current,
-        reported_at=reported.isoformat() if hasattr(reported, "isoformat") else None,
+        reported_at=reported.isoformat() if isinstance(reported, datetime) else None,
     )
 
 

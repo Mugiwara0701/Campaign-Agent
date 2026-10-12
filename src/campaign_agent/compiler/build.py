@@ -42,10 +42,14 @@ class Candidate:
         return self.report.passed
 
 
-def _level6(earlier: tuple[LevelResult, ...], text: str, downstream: Downstream | None) -> LevelResult:
+def _level6(
+    earlier: tuple[LevelResult, ...], text: str, downstream: Downstream | None
+) -> LevelResult:
     """L6 runs only when L3 to L5 passed: the MA's loader would reject the file anyway, at the cost of a process."""
     if downstream is None:
-        return LevelResult(6, "downstream", "skipped", note="no Marketing Agent loader is configured")
+        return LevelResult(
+            6, "downstream", "skipped", note="no Marketing Agent loader is configured"
+        )
     if any(lv.status == "failed" for lv in earlier):
         return LevelResult(6, "downstream", "skipped", note="not run: an earlier level failed")
     return downstream.check(text)

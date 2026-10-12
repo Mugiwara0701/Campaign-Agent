@@ -12,10 +12,11 @@ When L6 cannot run (no checkout configured, or no way to cut the network) the le
 `required` is set, in which case that is a failure: nothing is published that was not checked.
 """
 
+import contextlib
 import os
 import shutil
 import signal
-import subprocess  # noqa: S404
+import subprocess
 import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -58,10 +59,8 @@ def subprocess_runner(
     try:
         out, err = proc.communicate(timeout=timeout_s)
     except subprocess.TimeoutExpired:
-        try:
+        with contextlib.suppress(ProcessLookupError):
             os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
         out, err = proc.communicate()
         return RunResult(-9, (out or "")[:_OUTPUT_CAP], (err or "")[:_OUTPUT_CAP], timed_out=True)
     return RunResult(proc.returncode, (out or "")[:_OUTPUT_CAP], (err or "")[:_OUTPUT_CAP])
@@ -115,14 +114,22 @@ class Downstream:
                 "LANG": "C.UTF-8",
                 "PYTHONDONTWRITEBYTECODE": "1",
             }
-            argv = (*_NO_NETWORK, self.python, "-m", "agent", "leads", "queries", "--campaign", str(path))
+            argv = (
+                *_NO_NETWORK,
+                self.python,
+                *("-m", "agent", "leads", "queries", "--campaign", str(path)),
+            )
             result = self.runner(argv, self.checkout, env, self.timeout_s)
         if result.timed_out:
-            return self._failed("timeout", f"the Marketing Agent did not answer within {self.timeout_s:g} s")
+            return self._failed(
+                "timeout", f"the Marketing Agent did not answer within {self.timeout_s:g} s"
+            )
         if result.returncode != 0:
             return self._failed("loader_rejected", _message(result))
         if not any(ln.strip() for ln in result.stdout.splitlines()):
-            return self._failed("no_queries", "the Marketing Agent generated no search queries from it")
+            return self._failed(
+                "no_queries", "the Marketing Agent generated no search queries from it"
+            )
         return level_result(LEVEL, NAME, [])
 
     @staticmethod

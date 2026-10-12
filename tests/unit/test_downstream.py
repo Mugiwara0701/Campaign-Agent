@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from campaign_agent.compiler.build import build_candidate, validate_overlay_text
 from campaign_agent.ma_status import MaStatus, parse_status
@@ -25,7 +26,7 @@ class FakeRunner:
         return RunResult(0, "", "")  # the "can the network be cut" probe
 
 
-def downstream(tmp_path: Path, result: RunResult, **kw) -> tuple[Downstream, FakeRunner]:  # type: ignore[no-untyped-def]
+def downstream(tmp_path: Path, result: RunResult, **kw: Any) -> tuple[Downstream, FakeRunner]:
     runner = FakeRunner(result)
     return Downstream(tmp_path, runner=runner, **kw), runner
 
@@ -53,7 +54,8 @@ def test_the_loader_accepting_the_file_passes_and_gets_exact_text(tmp_path: Path
     argv, cwd, env, _ = runner.calls[-1]
     assert argv[:3] == ("unshare", "--net", "--map-root-user")
     assert argv[-4:-1] == ("leads", "queries", "--campaign") and cwd == tmp_path
-    assert set(env) == {"PATH", "HOME", "LANG", "PYTHONDONTWRITEBYTECODE"}  # nothing secret leaks in
+    # nothing secret leaks in
+    assert set(env) == {"PATH", "HOME", "LANG", "PYTHONDONTWRITEBYTECODE"}
 
 
 def test_a_rejection_shows_the_loaders_last_line(tmp_path: Path) -> None:
@@ -124,7 +126,9 @@ def test_supported_versions() -> None:
 def test_applied_needs_the_same_campaign_version_and_hash_and_no_error() -> None:
     s = status(current_campaign={"id": "c", "version": 2, "sha256": "h", "applied_at": "t"})
     assert s.applied("c", 2, "h")
-    assert not s.applied("c", 1, "h") and not s.applied("c", 2, "other") and not s.applied("d", 2, "h")
+    assert not s.applied("c", 1, "h")
+    assert not s.applied("c", 2, "other")
+    assert not s.applied("d", 2, "h")
 
 
 def test_a_refused_version_is_not_applied_and_the_reason_is_kept() -> None:

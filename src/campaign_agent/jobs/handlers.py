@@ -395,7 +395,8 @@ def _refuse_unloadable_contract(svc: Services, contract_version: str) -> None:
         return
     raise RequestError(
         ErrorCode.PUBLISH_BLOCKED,
-        f"the Marketing Agent loads contract version(s) {', '.join(status.supported_contract_versions)}, "
+        f"the Marketing Agent loads contract version(s) "
+        f"{', '.join(status.supported_contract_versions)}, "
         f"not {contract_version}; update the Marketing Agent first",
         {
             "contract_version": contract_version,

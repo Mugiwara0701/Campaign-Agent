@@ -364,7 +364,8 @@ def test_a_version_the_marketing_agent_cannot_load_is_not_published() -> None:
     assert out.error is not None and out.error.code is ErrorCode.PUBLISH_BLOCKED
     assert "2.0" in out.error.detail and out.error.result["ma_supported"] == ["2.0"]
     assert out.action is None
-    assert out.conv.state is ws.conv.state  # nothing about the campaign changed; try again after the update
+    # nothing about the campaign changed; try again after the update
+    assert out.conv.state is ws.conv.state
 
 
 def test_a_version_the_marketing_agent_loads_is_published() -> None:
