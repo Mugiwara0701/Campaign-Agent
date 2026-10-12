@@ -144,6 +144,13 @@ are not copied by `sync`, and `install-service` points the service at the new fo
 - **`Permission denied (publickey)`:** run `init` again, or `ssh-copy-id user@host`.
 - **The service starts and stops:** `bash deploy/remote.sh logs`. Usually `DATABASE_URL` is missing or the
   `campaign_agent` role has no password yet.
+- **`ECIRCUITBREAKER ... too many authentication failures` in the log:** the database's pooler blocked new logins from this
+  address after repeated wrong-password attempts. Stop the service (`bash deploy/remote.sh down`), fix the `DATABASE_URL`
+  (user `campaign_agent.<project-ref>`, the password you set, special characters percent-encoded), wait about ten
+  minutes, then start it again. The worker waits ten minutes between tries after a refused login, so it does not keep
+  the block going. The block may also affect other machines that share this office's internet address.
+- **`password authentication failed for user "campaign_agent..."`:** the password in the URL differs from the one set for
+  the role. Set it again (SQL editor: `alter role campaign_agent with login password '...';`) and update the `.env`.
 - **`model_unavailable` in the dashboard:** `bash deploy/remote.sh status` shows whether Ollama is up and the model loaded.
 - **The service does not survive a logout:** run once on the office machine `sudo loginctl enable-linger $USER`.
 

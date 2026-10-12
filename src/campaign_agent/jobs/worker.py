@@ -15,6 +15,29 @@ from campaign_agent.store.db import Database
 log = logging.getLogger("campaign_agent.worker")
 
 
+# When the database refuses the LOGIN (wrong password, unknown user, or the pooler's circuit breaker), trying
+# again quickly cannot help and can make it worse: repeated failures get a client blocked, sometimes everyone
+# behind the same address. So wait long, and keep the service quiet until someone fixes the URL.
+LOGIN_BACKOFF_S = 600.0
+_LOGIN_MARKERS = (
+    "authentication failed",
+    "tenant or user not found",
+    "ecircuitbreaker",
+    "too many authentication failures",
+    "no pg_hba.conf entry",
+)
+
+
+def is_login_problem(detail: str) -> bool:
+    text = detail.lower()
+    return any(marker in text for marker in _LOGIN_MARKERS)
+
+
+def backoff_for(detail: str, failures: int) -> float:
+    """Seconds to wait after a database error: short and growing for glitches, long for a refused login."""
+    return LOGIN_BACKOFF_S if is_login_problem(detail) else min(60.0, 2.0**failures)
+
+
 def agent_version() -> str:
     try:
         return metadata.version("campaign-agent")
@@ -62,6 +85,13 @@ class Worker:
             self._beat("idle")
         return did
 
+    def _wait(self, seconds: float) -> None:
+        """Sleep in one-second slices so a stop request (SIGTERM) is honoured within a second."""
+        left = seconds
+        while left > 0 and not self._stop:
+            self._sleep(min(1.0, left))
+            left -= 1.0
+
     def run_forever(self) -> None:
         log.info("worker started", extra={"worker_id": self._cfg.worker_id})
         failures = 0
@@ -74,8 +104,12 @@ class Worker:
                 # The first line of the database's own message says why (wrong password, host unreachable,
                 # missing table). libpq never puts the password in it.
                 detail = str(exc).splitlines()[0][:240] if str(exc) else ""
-                log.exception("database error", extra={"failures": failures, "detail": detail})
-                self._sleep(min(60.0, 2.0**failures))
+                wait = backoff_for(detail, failures)
+                log.exception(
+                    "database error",
+                    extra={"failures": failures, "detail": detail, "retry_in_s": wait},
+                )
+                self._wait(wait)
                 continue
             if not did:
                 self._sleep(self._poll)
