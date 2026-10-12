@@ -137,7 +137,7 @@ case "$cmd" in
   setup)
     do_sync
     # needs the sudo password on the office machine, so a terminal is attached
-    rssh -t "cd ~/$REMOTE_DIR && bash deploy/bootstrap-ubuntu.sh"
+    rssh -t "cd ~/$REMOTE_DIR && CA_ON_OFFICE_MACHINE=1 bash deploy/bootstrap-ubuntu.sh"
     ;;
   deps)
     do_sync

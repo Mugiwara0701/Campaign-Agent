@@ -1,14 +1,33 @@
 #!/usr/bin/env bash
 # One-shot setup of the office machine that hosts the model and runs the Campaign Agent.
-# Run it ON the office machine, from the synced folder, as your normal user (not root):
-#   bash deploy/bootstrap-ubuntu.sh        (or, from the laptop: bash deploy/remote.sh setup)
-# Safe to re-run. Never overwrites an existing .env and never prints secrets.
 #
+#   bash deploy/bootstrap-ubuntu.sh        run it from your laptop: it sets up the OFFICE machine (via deploy/remote.sh)
+#
+# It only installs on the machine it is told is the office machine. Run anywhere else (your laptop) it installs
+# nothing: it hands the job to `deploy/remote.sh setup`, which runs it over SSH on the office machine.
+# To install on THIS machine on purpose (you are logged in to the office machine yourself):
+#   CA_ON_OFFICE_MACHINE=1 bash deploy/bootstrap-ubuntu.sh
+#
+# Safe to re-run. Never overwrites an existing .env and never prints secrets.
 # Overrides: LLM_MODEL (default qwen3.5:9b), SKIP_MODEL=1 (do not pull the model), SKIP_OLLAMA=1
 set -euo pipefail
 
 LLM_MODEL="${LLM_MODEL:-qwen3.5:9b}"
 cd "$(dirname "$0")/.."
+
+if [ "${CA_ON_OFFICE_MACHINE:-}" != 1 ]; then
+  if [ -n "${REMOTE:-}" ] || [ -f .remote.env ]; then
+    echo "This is not the office machine ($(hostname)). Running the setup there, via deploy/remote.sh ..."
+    exec bash deploy/remote.sh setup
+  fi
+  {
+    echo "Nothing was installed. This script sets up the OFFICE machine, and none is configured yet."
+    echo "  1. bash deploy/remote.sh init <office-user>@<office-address>"
+    echo "  2. bash deploy/bootstrap-ubuntu.sh      (or: bash deploy/remote.sh setup)"
+    echo "To install on THIS machine on purpose: CA_ON_OFFICE_MACHINE=1 bash deploy/bootstrap-ubuntu.sh"
+  } >&2
+  exit 1
+fi
 
 [ "$(id -u)" -ne 0 ] || { echo "run as your normal user, not root" >&2; exit 1; }
 sudo -v

@@ -7,6 +7,8 @@ Wants=network-online.target
 Type=simple
 # Replaced with the real folder by `deploy/remote.sh install-service`.
 WorkingDirectory=%h/Campaign-Agent
+# Tells deploy/start-agent.sh this really is the office machine.
+Environment=CA_ON_OFFICE_MACHINE=1
 ExecStart=/bin/bash %h/Campaign-Agent/deploy/start-agent.sh
 Restart=on-failure
 RestartSec=15

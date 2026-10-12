@@ -26,11 +26,16 @@ the laptop: no model, no tests, no database. This is the same pattern as the Mar
 
    Different networks: install Tailscale on both machines and use the Tailscale address.
 3. **Install everything on the office machine** (Python 3.12, Ollama, the model, dependencies). It asks for the
-   office machine's sudo password and downloads the model, which takes a while:
+   office machine's sudo password and downloads the model there, which takes a while:
 
    ```bash
-   bash deploy/remote.sh setup
+   bash deploy/bootstrap-ubuntu.sh      # from the laptop: it runs on the office machine
    ```
+
+   `bash deploy/remote.sh setup` is the same thing. `deploy/bootstrap-ubuntu.sh` never installs on the machine you run
+   it from: run anywhere but the office machine it hands the job to `remote.sh setup`, or stops with a message if no
+   office machine is configured yet (run `init` first). To install on the machine you are logged in to, on purpose:
+   `CA_ON_OFFICE_MACHINE=1 bash deploy/bootstrap-ubuntu.sh`.
 
 4. **Send the `.env` file.** It shows what goes where and asks before copying:
 
@@ -102,7 +107,14 @@ credentials, `.git`, `.venv`, caches or build output. Files that exist only on t
 - **`model_unavailable` in the dashboard:** `bash deploy/remote.sh status` shows whether Ollama is up and the model loaded.
 - **The service does not survive a logout:** run once on the office machine `sudo loginctl enable-linger $USER`.
 
-## G. Checks
+## G. Scripts never act on the laptop
+
+- `deploy/bootstrap-ubuntu.sh` installs only on the office machine (see A3).
+- `deploy/start-agent.sh`, the service's entry point, refuses to start anywhere but the office machine, because a laptop
+  `.env` may point at the live database. The systemd unit sets `CA_ON_OFFICE_MACHINE=1`; from the laptop use
+  `bash deploy/remote.sh up`.
+
+## H. Checks
 
 CI runs `bash -n` and `shellcheck` on the scripts in `deploy/`. They are checked there, never run by CI, because they
 log in to the office machine.
