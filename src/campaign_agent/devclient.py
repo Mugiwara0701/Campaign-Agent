@@ -223,8 +223,8 @@ class DevClient:
         """Send a message, then follow the conversation until it is live, stopped or left. Returns an exit code."""
         campaign_id = self.create(message)
         self.out(f"Test campaign {campaign_id}. Sending the message and waiting for the agent...")
-        row = self.send(campaign_id, "interpret")
-        while True:
+        row: dict[str, Any] | None = self.send(campaign_id, "interpret")
+        while row is not None:
             self._report(row)
             view = self.view(campaign_id)
             if view is None:
@@ -234,8 +234,6 @@ class DevClient:
             for line in format_view(view):
                 self.out(line)
             row = self._next(campaign_id, view)
-            if row is None:
-                break
         self.out("")
         self.out(
             f"Test campaign {campaign_id} stays in the database. Remove all test campaigns: bash deploy/remote.sh try --clean"

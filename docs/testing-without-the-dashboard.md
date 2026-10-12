@@ -39,6 +39,7 @@ the review, and asks what to do next, depending on the state:
 | `MODEL_UNAVAILABLE` | try again? |
 
 What to look at in the review:
+
 - **Each field and where it came from**: `inferred` (the model read it, with the quote), `confirmed` (you answered or edited it),
   `defaulted`.
 - **"Could not be applied"**: US-only, company size, decision-maker roles, LinkedIn, anything the Marketing Agent can't do yet.
