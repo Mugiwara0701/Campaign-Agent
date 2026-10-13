@@ -4,3 +4,10 @@
 81857783accc824224b71dd499544d13d2b625d3:tests/unit/test_input_guard.py:jwt:47
 81857783accc824224b71dd499544d13d2b625d3:tests/unit/test_input_guard.py:aws-access-token:42
 81857783accc824224b71dd499544d13d2b625d3:tests/unit/test_extractor.py:aws-access-token:141
+
+# Fake secrets for the input-guard benchmark cases, in the first M10 commit (now a placeholder expanded at load time,
+# see src/campaign_agent/evaluation/dataset.py). None is a real credential.
+af1ac94b5094c4d90a2ba9150e8f59a6029c42d9:benchmarks/dataset/cases.jsonl:generic-api-key:86
+af1ac94b5094c4d90a2ba9150e8f59a6029c42d9:benchmarks/dataset/cases.jsonl:generic-api-key:87
+af1ac94b5094c4d90a2ba9150e8f59a6029c42d9:benchmarks/dataset/cases.jsonl:generic-api-key:88
+af1ac94b5094c4d90a2ba9150e8f59a6029c42d9:benchmarks/build_dataset.py:generic-api-key:373
