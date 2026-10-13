@@ -39,7 +39,9 @@ class Settings(BaseSettings):
     ma_required: bool = False
     # Concept research (what a term means). Off unless switched on; nothing is searched while it is off.
     research_enabled: bool = False
-    searxng_url: str = "http://127.0.0.1:8080"  # our own instance on this machine, never a shared one
+    searxng_url: str = (
+        "http://127.0.0.1:8080"  # our own instance on this machine, never a shared one
+    )
     # Comma-separated domains. Allow empty = any public site except the denied ones (and the built-in deny list).
     research_allow_domains: str = ""
     research_deny_domains: str = ""

@@ -28,7 +28,9 @@ class ResearchResult:
     suggestions: tuple[Suggestion, ...] = ()
     searches: int = 0
     fetches: int = 0
-    notes: tuple[str, ...] = field(default=())  # why something was dropped or failed; never user text
+    notes: tuple[str, ...] = field(
+        default=()
+    )  # why something was dropped or failed; never user text
 
 
 class Researcher:

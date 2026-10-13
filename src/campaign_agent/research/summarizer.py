@@ -99,9 +99,7 @@ def _clean_page_text(text: str) -> str:
 
 def user_prompt(need: ResearchNeed, pages: list[Page]) -> str:
     wanted = ", ".join(ALLOWED_PATHS[need.kind])
-    body = "\n".join(
-        f'<page url="{p.url}">\n{_clean_page_text(p.text)}\n</page>' for p in pages
-    )
+    body = "\n".join(f'<page url="{p.url}">\n{_clean_page_text(p.text)}\n</page>' for p in pages)
     return (
         f"Need: {need.kind}\n<term>{need.term}</term>\nAllowed paths: {wanted}\n\n"
         f"<pages>\n{body}\n</pages>"

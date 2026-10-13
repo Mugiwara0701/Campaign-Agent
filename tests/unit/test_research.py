@@ -470,9 +470,11 @@ def test_with_research_off_nothing_is_searched_and_nothing_changes() -> None:
 
 
 def test_suggestions_are_stored_as_suggested_and_the_users_values_stay() -> None:
-    r = researcher(SpySearch(hits(1)), SpyFetcher(), summary_reply(
-        path="audience.products", source_urls=["https://docs.example.org/0"]
-    ))
+    r = researcher(
+        SpySearch(hits(1)),
+        SpyFetcher(),
+        summary_reply(path="audience.products", source_urls=["https://docs.example.org/0"]),
+    )
     out = run_interpret(r)
     assert out.error is None
     assert [s.status for s in out.ir.suggestions] == ["suggested"]
@@ -483,9 +485,15 @@ def test_suggestions_are_stored_as_suggested_and_the_users_values_stay() -> None
 
 
 def test_a_suggestion_that_repeats_a_confirmed_value_is_not_added() -> None:
-    r = researcher(SpySearch(hits(1)), SpyFetcher(), summary_reply(
-        path="audience.industries", values=["robotics"], source_urls=["https://docs.example.org/0"]
-    ))
+    r = researcher(
+        SpySearch(hits(1)),
+        SpyFetcher(),
+        summary_reply(
+            path="audience.industries",
+            values=["robotics"],
+            source_urls=["https://docs.example.org/0"],
+        ),
+    )
     out = run_interpret(r)
     assert out.ir.suggestions == [] and out.ir.audience.industries == ["robotics"]
 
