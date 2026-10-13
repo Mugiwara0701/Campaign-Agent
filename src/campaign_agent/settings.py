@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     # than the slowest request: a few model calls at LLM_TIMEOUT_S each.
     lease_s: int = Field(default=1800, ge=60)
     max_attempts: int = Field(default=3, ge=1, le=10)
+    # Requests per requester per minute (0 = no limit). See docs/security-review.md.
+    rate_limit_per_minute: int = Field(default=30, ge=0, le=10_000)
     worker_id: str = ""
     # Level 6: a pinned checkout of the Marketing Agent on this machine, run with no network (see downstream.py).
     ma_checkout: Path | None = None

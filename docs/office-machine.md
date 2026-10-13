@@ -8,6 +8,9 @@ the laptop: no model, no tests, no database. This is the same pattern as the Mar
   overwrites them.
 - **Office machine:** Ollama and the model, the Python environment, and the `campaign-agent` service.
 
+> **Starting from nothing, or recovering?** [runbook.md](runbook.md) has the full order of steps (it runs the service as a
+> dedicated account with no sudo), the rollback and the emergency procedures. This document keeps the details of each command.
+
 ## A. One-time setup
 
 1. **Office machine:** install Ubuntu, create your user, note the address and the username:

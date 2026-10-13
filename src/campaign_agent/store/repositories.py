@@ -104,6 +104,20 @@ returning c.*
 """
 
 
+def count_recent_requests(conn: Conn, requested_by: str, window_s: int, *, except_id: str) -> int:
+    """How many requests this requester had picked up in the last `window_s` seconds (this one not counted)."""
+    row = conn.execute(
+        """
+        select count(*) as n from public.campaign_request
+        where requested_by = %s and id <> %s
+          and claimed_at > now() - make_interval(secs => %s)
+        """,
+        (requested_by, except_id, window_s),
+    ).fetchone()
+    assert row is not None  # noqa: S101
+    return int(row["n"])
+
+
 def claim_request(conn: Conn, worker_id: str, lease_seconds: int) -> Row | None:
     return conn.execute(_CLAIM, (worker_id, lease_seconds)).fetchone()
 

@@ -54,6 +54,9 @@ class ManagerConfig:
     worker_id: str
     lease_s: int
     max_attempts: int
+    # Requests one requester may have picked up per minute; the rest are refused with rate_limited.
+    # It keeps one noisy or hostile requester from using up the model. 0 turns the limit off.
+    rate_limit_per_minute: int = 30
 
 
 def _request(row: dict[str, Any]) -> Request:
@@ -227,6 +230,18 @@ def process_next(db: Database, svc: Services, cfg: ManagerConfig) -> bool:
     log.info("request started", extra=context)
     try:
         with db.transaction() as conn:
+            if cfg.rate_limit_per_minute and (
+                repo.count_recent_requests(conn, req.requested_by, 60, except_id=req.id)
+                >= cfg.rate_limit_per_minute
+            ):
+                repo.fail_request(
+                    conn,
+                    req.id,
+                    ErrorCode.RATE_LIMITED.value,
+                    f"too many requests from {req.requested_by[:40]}; wait a minute and try again",
+                )
+                log.warning("request refused", extra={**context, "code": "rate_limited"})
+                return True
             campaign = repo.get_campaign(conn, req.campaign_id)
             if campaign is None:
                 repo.fail_request(
