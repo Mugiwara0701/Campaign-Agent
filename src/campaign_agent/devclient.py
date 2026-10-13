@@ -78,7 +78,9 @@ def format_view(view: ReviewView) -> list[str]:
         issues = [i for lv in c.levels for i in lv.issues]
         lines.extend(f"  {i.severity}: {i.message}" for i in issues)
         # A level that did not run says why (for L6: no checkout, no sandbox, an earlier level failed)
-        lines.extend(f"  L{lv.level} skipped: {lv.note}" for lv in c.levels if lv.status == "skipped")
+        lines.extend(
+            f"  L{lv.level} skipped: {lv.note}" for lv in c.levels if lv.status == "skipped"
+        )
         lines.append("--- the YAML the Marketing Agent would get ---")
         lines.extend(c.yaml.rstrip().splitlines())
         lines.append("---")
