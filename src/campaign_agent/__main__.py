@@ -69,6 +69,7 @@ def _serve(command: str, settings: Settings) -> int:
     from campaign_agent.llm.adapter import GenParams
     from campaign_agent.logs import setup_logging
     from campaign_agent.ma_status import MaStatus, fetch_status
+    from campaign_agent.research.factory import build_researcher
     from campaign_agent.store.db import Database
     from campaign_agent.validators.downstream import Downstream
 
@@ -76,9 +77,8 @@ def _serve(command: str, settings: Settings) -> int:
     if settings.database_url is None:
         print("DATABASE_URL is not set", file=sys.stderr)
         return 2
-    extractor = Extractor(
-        make_adapter(settings), params=GenParams(timeout_s=settings.llm_timeout_s)
-    )
+    extractor_adapter = make_adapter(settings)
+    extractor = Extractor(extractor_adapter, params=GenParams(timeout_s=settings.llm_timeout_s))
     db = Database(settings.database_url.get_secret_value())
     cfg = ManagerConfig(
         worker_id=settings.worker_id or f"{socket.gethostname()}-{os.getpid()}",
@@ -98,7 +98,12 @@ def _serve(command: str, settings: Settings) -> int:
     )
     worker = Worker(
         db,
-        Services(extractor, downstream=downstream, ma_status=ma_status),
+        Services(
+            extractor,
+            downstream=downstream,
+            ma_status=ma_status,
+            researcher=build_researcher(settings, extractor_adapter),
+        ),
         cfg,
         model_name=settings.llm_model,
         poll_interval_s=settings.poll_interval_s,

@@ -28,7 +28,7 @@ from campaign_agent.conversation.turn import Notice, plan_turn
 from campaign_agent.extractor.extractor import ExtractionResult, Extractor, Status
 from campaign_agent.guard.input_guard import looks_like_secret
 from campaign_agent.ir.models import CampaignIR, new_ir
-from campaign_agent.ir.patch import IRPatch, PatchOp
+from campaign_agent.ir.patch import IRPatch, PatchOp, ResearchNeed
 from campaign_agent.jobs.requests import ErrorCode, Request, RequestError
 from campaign_agent.ma_status import MaStatus
 from campaign_agent.merger.patch_merger import (
@@ -39,12 +39,14 @@ from campaign_agent.merger.patch_merger import (
     SuggestionResolvedError,
     TurnContext,
     UnknownSuggestionError,
+    add_suggestions,
     apply_defaults,
     merge_patch,
     resolve_suggestion,
 )
 from campaign_agent.questions.builder import answer_question
 from campaign_agent.questions.models import Answer
+from campaign_agent.research import Researcher
 from campaign_agent.validators.downstream import Downstream
 from campaign_agent.view import LastRequest, ReviewView, build_view
 
@@ -90,6 +92,8 @@ class Services:
     downstream: Downstream | None = None
     # What the Marketing Agent reports (read from the database when asked). None = it never reported.
     ma_status: Callable[[], MaStatus | None] | None = None
+    # Bounded concept research. None = switched off (the default): nothing is searched.
+    researcher: Researcher | None = None
 
 
 @dataclass(frozen=True)
@@ -171,12 +175,27 @@ def _need_event(ws: Workspace, event: Event) -> None:
         )
 
 
+def _research(svc: Services, turn: _Turn, needs: list[ResearchNeed]) -> None:
+    """Look up what the model did not know, if research is on. Fail-soft: the campaign goes on either way.
+
+    What comes back is only ever stored as a pending suggestion; it never changes a value.
+    """
+    if not needs or svc.researcher is None:
+        return
+    turn.conv = turn.conv.after(Event.RESEARCH_NEEDED)
+    found = svc.researcher.run(needs, turn.ir)
+    if found.suggestions:
+        # Only the stored suggestions are kept: a refused one is not a problem with the user's text.
+        turn.ir = add_suggestions(turn.ir, list(found.suggestions), turn.turn).ir
+
+
 def _text_extraction(svc: Services, text: str, source: Source, turn: _Turn) -> None:
     """Run the model on the text and merge what it found. Raises RequestError when it cannot continue."""
     result: ExtractionResult = svc.extractor.run(text, turn.ir, source=source)
     if result.status is Status.OK and result.patch is not None:
         turn.warnings.extend(result.warnings)
         turn.absorb(merge_patch(turn.ir, result.patch, TurnContext(turn.turn, source, result.text)))
+        _research(svc, turn, result.patch.research_needs)
         return
     detail = "; ".join(i.message for i in result.guard_issues) or result.status.value
     if result.status is Status.INPUT_REJECTED:
