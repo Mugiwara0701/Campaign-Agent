@@ -72,3 +72,13 @@ def test_the_test_client_needs_a_database_and_a_message(
     monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@127.0.0.1:1/none")
     assert main(["try"]) == 2
     assert "Give a message" in capsys.readouterr().err
+
+
+def test_a_level_that_was_skipped_says_why() -> None:
+    from campaign_agent.compiler.build import build_candidate
+    from tests.unit.helpers import ir_with
+
+    candidate = build_candidate(ir_with(("qualification.min_qualify", 55)))
+    ir = ir_with(("qualification.min_qualify", 55))
+    lines = format_view(build_view(ir, ConversationState(), candidate=candidate, not_applied=()))
+    assert any(ln.startswith("  L6 skipped: ") and "loader" in ln for ln in lines)
