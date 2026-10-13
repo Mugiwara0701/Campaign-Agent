@@ -37,6 +37,15 @@ class Settings(BaseSettings):
     ma_timeout_s: float = Field(default=60.0, gt=0, le=600)
     # true: with no usable checkout nothing can be approved. false: level 6 is "skipped", visibly.
     ma_required: bool = False
+    # Concept research (what a term means). Off unless switched on; nothing is searched while it is off.
+    research_enabled: bool = False
+    searxng_url: str = (
+        "http://127.0.0.1:8080"  # our own instance on this machine, never a shared one
+    )
+    # Comma-separated domains. Allow empty = any public site except the denied ones (and the built-in deny list).
+    research_allow_domains: str = ""
+    research_deny_domains: str = ""
+    research_timeout_s: float = Field(default=10.0, gt=0, le=60)
 
 
 def load_settings() -> Settings:
