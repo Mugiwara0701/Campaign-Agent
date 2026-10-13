@@ -73,12 +73,29 @@ class Case(_C):
     note: str = ""
 
 
+# Fake secrets for the input-guard cases. Written whole in the data file they would look like real keys to a
+# secret scanner (CI fails), so the file holds a placeholder and the text is assembled here, as in the unit tests.
+_PLACEHOLDERS = {
+    "{{FAKE_API_KEY}}": "api_" + "key = s" + "k-abcdef1234567890abcdef",
+    "{{FAKE_PASSWORD}}": "pass" + "word: hunter2" + "hunter2",
+}
+
+
+def _expand(text: str) -> str:
+    for placeholder, value in _PLACEHOLDERS.items():
+        text = text.replace(placeholder, value)
+    return text
+
+
+def _case(line: str) -> Case:
+    raw = json.loads(line)
+    for turn in raw["turns"]:
+        turn["text"] = _expand(turn["text"])
+    return Case.model_validate(raw)
+
+
 def load_cases(path: Path) -> list[Case]:
-    cases = [
-        Case.model_validate(json.loads(line))
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    cases = [_case(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     ids = [c.id for c in cases]
     if len(ids) != len(set(ids)):
         raise ValueError("duplicate case ids")

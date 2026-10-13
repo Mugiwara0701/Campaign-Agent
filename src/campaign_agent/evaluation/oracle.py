@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from campaign_agent.evaluation.dataset import Case, GoldOp
-from campaign_agent.llm.stub import StubAdapter
+from campaign_agent.llm.stub import Reply, StubAdapter
 
 
 def _op(op: GoldOp) -> dict[str, Any]:
@@ -14,7 +14,7 @@ def _op(op: GoldOp) -> dict[str, Any]:
 def oracle_adapter(case: Case) -> StubAdapter:
     """One scripted reply per turn, in order. Turns the input guard rejects never reach the model."""
     needs = [{"kind": r.kind, "term": r.term} for r in case.research]
-    replies = []
+    replies: list[Reply] = []
     for i, turn in enumerate(case.turns):
         replies.append(
             json.dumps(

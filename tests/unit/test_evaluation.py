@@ -115,11 +115,12 @@ def test_the_oracle_meets_every_target_and_never_breaks_a_rule(cases: list[Case]
     assert not noisy, noisy
 
 
-def test_a_clarification_that_was_not_needed_is_counted(cases: list[Case]) -> None:
+def test_a_complete_case_that_the_model_reads_as_empty_raises_questions(cases: list[Case]) -> None:
     case = next(c for c in cases if c.id == "complete-01")
-    wrong = case.model_copy(update={"turns": [case.turns[0].model_copy(update={"ops": []})]})
-    result = run_case(wrong, oracle_extractor(wrong))
-    assert result.asked and not result.exact  # nothing was read, so the agent would ask
+    silent = case.model_copy(update={"turns": [case.turns[0].model_copy(update={"ops": []})]})
+    result = run_case(case, oracle_extractor(silent))  # the model read nothing; the labels say a lot
+    assert not result.exact and result.fn == len(case.turns[0].ops)
+    assert result.asked == ["no_area", "no_industry"]  # and the agent would ask for what was said
 
 
 # --- scoring ----------------------------------------------------------------------------------------------------

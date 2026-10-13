@@ -12,7 +12,7 @@ from typing import Any
 from campaign_agent.conversation.state import ConversationState
 from campaign_agent.conversation.turn import plan_turn
 from campaign_agent.evaluation.dataset import Case, GoldOp
-from campaign_agent.extractor.extractor import Extractor, Status
+from campaign_agent.extractor.extractor import Attempt, Extractor, Status
 from campaign_agent.ir.models import CampaignIR, new_ir
 from campaign_agent.ir.patch import IRPatch, PatchOp
 from campaign_agent.ir.registry import REGISTRY, get_value
@@ -141,7 +141,7 @@ def run_case(
     rejected: list[Rejected] = []
     all_rejected: list[Rejected] = []
     applied_paths: list[str] = []
-    attempts_all = []
+    attempts_all: list[Attempt] = []
     for n, turn in enumerate(case.turns, 1):
         source = Source.EXTRACTION if turn.source == "message" else Source.EDIT_REQUEST
         extraction = extractor.run(turn.text, ir, source=source)

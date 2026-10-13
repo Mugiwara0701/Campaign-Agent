@@ -3,7 +3,7 @@
 import os
 import platform
 import shutil
-import subprocess  # noqa: S404
+import subprocess
 from typing import Any
 
 import httpx
@@ -13,7 +13,7 @@ from campaign_agent.settings import Settings
 
 def _git_sha() -> str | None:
     try:
-        out = subprocess.run(  # noqa: S603
+        out = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],  # noqa: S607
             capture_output=True,
             text=True,
