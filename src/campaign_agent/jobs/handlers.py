@@ -8,6 +8,7 @@ Every request runs the conversation to a resting state: questions to answer, a c
 validation failure to fix, or the model being unavailable.
 """
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -161,6 +162,19 @@ def _validate(t: _Turn) -> None:
 
 
 # --- helpers ------------------------------------------------------------------------------------------------------
+
+
+MAX_PAYLOAD_CHARS = 100_000  # far above any real request; the text itself is limited further by the input guard
+
+
+def _check_size(req: Request) -> None:
+    """The dashboard's payload is untrusted input like any other: refuse an absurd one before reading it."""
+    try:
+        size = len(json.dumps(req.payload, default=str))
+    except (TypeError, ValueError):
+        size = MAX_PAYLOAD_CHARS + 1
+    if size > MAX_PAYLOAD_CHARS:
+        raise _fail(ErrorCode.INVALID_REQUEST, "the request is too large")
 
 
 def _fail(code: ErrorCode, detail: str, **result: Any) -> RequestError:
@@ -492,6 +506,7 @@ def handle(req: Request, ws: Workspace, svc: Services) -> Outcome:
     t = _Turn(ir=ir, conv=ws.conv, turn=ws.conv.turn + 1, downstream=svc.downstream)
     error: RequestError | None = None
     try:
+        _check_size(req)
         _check_revision(req, ir)
         handler = _HANDLERS.get(req.request_type)
         if handler is None:

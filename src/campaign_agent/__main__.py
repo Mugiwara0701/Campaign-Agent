@@ -3,7 +3,9 @@ python -m campaign_agent once            take at most one request, then exit (us
 python -m campaign_agent migrate         apply the SQL files in migrations/ to the database (asks first)
 python -m campaign_agent agent-password  set the login password of the limited campaign_agent role
 python -m campaign_agent try "message"   act as the dashboard to test the agent (office machine only)
-python -m campaign_agent try --clean     remove the test campaigns"""
+python -m campaign_agent try --clean     remove the test campaigns
+python -m campaign_agent bench           measure a model on the benchmark (docs/evaluation.md)
+python -m campaign_agent retention       clear old request text (docs/retention.md; asks for --yes)"""
 
 import argparse
 import os
@@ -61,6 +63,16 @@ def _try(args: argparse.Namespace, settings: Settings) -> int:
         db.close()
 
 
+def _retention(args: argparse.Namespace, settings: Settings) -> int:
+    from campaign_agent.store.retention import run_retention
+
+    url = _admin_url(settings)
+    if url is None:
+        print("MIGRATE_DATABASE_URL (or DATABASE_URL) is not set", file=sys.stderr)
+        return 2
+    return run_retention(url, args.days, apply=args.yes)
+
+
 def _bench(args: argparse.Namespace, settings: Settings) -> int:
     from campaign_agent.evaluation.run import run_benchmark, write_report
 
@@ -104,6 +116,7 @@ def _serve(command: str, settings: Settings) -> int:
         worker_id=settings.worker_id or f"{socket.gethostname()}-{os.getpid()}",
         lease_s=settings.lease_s,
         max_attempts=settings.max_attempts,
+        rate_limit_per_minute=settings.rate_limit_per_minute,
     )
 
     def ma_status() -> MaStatus | None:
@@ -147,7 +160,7 @@ def _serve(command: str, settings: Settings) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="campaign_agent", description="Campaign Agent")
     parser.add_argument(
-        "command", choices=["start", "once", "migrate", "agent-password", "try", "bench"]
+        "command", choices=["start", "once", "migrate", "agent-password", "try", "bench", "retention"]
     )
     parser.add_argument(
         "message", nargs="?", default=None, help="try: the campaign message to send"
@@ -156,7 +169,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--plan", action="store_true", help="migrate: only show what would be applied"
     )
-    parser.add_argument("--yes", action="store_true", help="migrate: apply without asking")
+    parser.add_argument("--yes", action="store_true", help="migrate, retention: really do it")
+    parser.add_argument(
+        "--days", type=int, default=90, help="retention: clear request text older than this"
+    )
     parser.add_argument(
         "--dir", type=Path, default=None, help="migrate: the folder with the .sql files"
     )
@@ -171,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
     settings = load_settings()
     if args.command == "bench":
         return _bench(args, settings)
+    if args.command == "retention":
+        return _retention(args, settings)
     if args.command in ("migrate", "agent-password"):
         return _admin(args.command, args, settings)
     if args.command == "try":

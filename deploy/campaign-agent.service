@@ -2,6 +2,9 @@
 Description=Campaign Agent: turns dashboard requests into campaign versions for the Marketing Agent (polls the database)
 After=network-online.target
 Wants=network-online.target
+# A crash loop must not hammer the database login (it can be blocked for ten minutes): 5 starts in 10 minutes, then stop.
+StartLimitIntervalSec=600
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -15,6 +18,17 @@ RestartSec=15
 # SIGTERM: the worker finishes the request it is on, then exits. A request that is cut off is retried later.
 TimeoutStopSec=180
 Nice=10
+
+# Limits and sandbox. The model runs in Ollama, a separate service; this process only talks to it, the database,
+# our own search instance and the pages research fetches, so it needs little. Do NOT add RestrictNamespaces or
+# PrivateNetwork: level 6 starts the Marketing Agent's loader in a new network namespace (unshare --net).
+MemoryMax=1G
+TasksMax=256
+LimitNOFILE=4096
+LimitCORE=0
+NoNewPrivileges=yes
+PrivateTmp=yes
+UMask=0077
 
 [Install]
 WantedBy=default.target

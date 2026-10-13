@@ -33,6 +33,7 @@ Commands:
   deps                  sync, then install/update the Python dependencies there
   install-service       one-time: install the long-running service (campaign-agent)
   deploy [--env]        sync [+ push-env], install dependencies, restart the service
+  rollback <git-ref>    put the code of an earlier commit or tag on the office machine and restart (see docs/runbook.md)
   up                    sync, then (re)start the service
   down                  stop the service
   status                is the service running, is the model server up, the last log lines
@@ -74,7 +75,7 @@ do_sync() {
     --exclude='out/' --exclude='.cache/' --exclude='__pycache__/' --exclude='.*_cache/' \
     --exclude='.coverage' --exclude='htmlcov/' --exclude='node_modules/' --exclude='*.pyc' \
     --exclude='*.egg-info/' \
-    ./ "$REMOTE:$REMOTE_DIR/"
+    "${SYNC_SRC:-.}/" "$REMOTE:$REMOTE_DIR/"
 }
 
 # A database role that owns the tables is far more than the agent needs. Warn, and ask for a typed word.
@@ -158,6 +159,21 @@ case "$cmd" in
     if [ "${1:-}" = "--env" ]; then do_push_env; fi
     remote_run uv pip install --python .venv/bin/python -e ".[dev]"
     rssh "systemctl --user restart $SERVICE && sleep 3 && systemctl --user --no-pager status $SERVICE | head -5"
+    ;;
+  rollback)
+    [ $# -eq 1 ] || { echo "usage: remote.sh rollback <git-ref>   (a tag, a commit, a branch)" >&2; exit 1; }
+    git rev-parse --verify --quiet "$1^{commit}" >/dev/null || { echo "no such commit: $1" >&2; exit 1; }
+    sha=$(git rev-parse --short "$1^{commit}")
+    echo "About to replace the code on $REMOTE with commit $sha ($1). Database migrations are not undone."
+    read -r -p "Type 'rollback' to continue: " word
+    [ "$word" = rollback ] || { echo "cancelled" >&2; exit 1; }
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    git archive "$1^{commit}" | tar -x -C "$tmp"
+    SYNC_SRC="$tmp" do_sync
+    remote_run uv pip install --python .venv/bin/python -e ".[dev]"
+    rssh "systemctl --user restart $SERVICE && sleep 3 && systemctl --user --no-pager status $SERVICE | head -5"
+    echo "now running commit $sha"
     ;;
   up)
     do_sync

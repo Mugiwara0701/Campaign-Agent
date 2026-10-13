@@ -31,6 +31,7 @@ class ErrorCode(StrEnum):
     STALE_APPROVAL = "stale_approval"
     PUBLISH_BLOCKED = "publish_blocked"
     PUBLISH_FAILED = "publish_failed"
+    RATE_LIMITED = "rate_limited"
     INTERNAL_ERROR = "internal_error"
     WORKER_CRASHED = "worker_crashed"
 

@@ -25,3 +25,10 @@ pytest
 Without `TEST_DATABASE_URL` those tests are skipped. Run the service with `python -m campaign_agent start`.
 
 CI runs on every push and pull request (`.github/workflows/`).
+
+## Operating it
+
+- [docs/runbook.md](docs/runbook.md): fresh install, upgrade, rollback, and what to do when the model or the database is down.
+- [docs/office-machine.md](docs/office-machine.md): the everyday `deploy/remote.sh` commands.
+- [docs/security-review.md](docs/security-review.md) and [docs/retention.md](docs/retention.md): the security review and what is kept for how long.
+- [docs/evaluation.md](docs/evaluation.md): measuring a model on the benchmark.
