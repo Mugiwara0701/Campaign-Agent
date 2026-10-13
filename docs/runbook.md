@@ -133,3 +133,13 @@ agent does is needed for a pass to run. Only new campaigns and edits wait.
 A machine rebuilt from this runbook is accepted when: `status` is green; `try` with the example message reaches
 `AWAITING_REVIEW` with the expected values and `try --clean` removes it; the logs show no prompts or user text
 (`remote.sh logs | grep -c "Find robotics"` prints 0); `bash deploy/remote.sh agent bench --oracle --split all` passes.
+
+## 7. The nightly real-model run (optional)
+
+`.github/workflows/nightly.yml` runs the benchmark with the real model every night and uploads the report. It needs a
+GitHub Actions **self-hosted runner** on the office machine, labelled `office-machine`, installed by an administrator
+under its own unprivileged account (GitHub's page "Settings, Actions, Runners, New self-hosted runner" gives the
+commands). The workflow only runs on a schedule or by hand, never for pull requests, so pull-request code cannot reach
+that machine. Set the repository variable `NIGHTLY_ENABLED` to `true` once the runner is online; `NIGHTLY_MODEL` picks the
+model. A failed target (`--check`) fails the run, which is the morning signal that a model, prompt or dependency change
+broke extraction.

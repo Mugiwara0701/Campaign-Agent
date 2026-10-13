@@ -1,0 +1,50 @@
+name: Nightly real-model run
+
+# The CI in ci.yml runs everything with a stub model. This is the same pipeline with the real model, on the
+# office machine (a self-hosted runner), so a model, prompt or dependency change that breaks extraction is seen
+# the next morning.
+# It does nothing until the repository variable NIGHTLY_ENABLED is "true" (set it after the runner exists, see
+# docs/runbook.md). Run it by hand from the Actions tab at any time.
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  real-model:
+    name: Benchmark with the real model
+    if: github.event_name == 'workflow_dispatch' || vars.NIGHTLY_ENABLED == 'true'
+    runs-on: [self-hosted, office-machine]
+    timeout-minutes: 240
+    env:
+      LLM_BACKEND: ollama
+      LLM_BASE_URL: http://127.0.0.1:11434
+      LLM_MODEL: ${{ vars.NIGHTLY_MODEL || 'qwen3.5:9b' }}
+      LLM_TIMEOUT_S: "600"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install
+        run: |
+          python3.12 -m venv .venv
+          .venv/bin/pip install -e ".[dev]"
+      - name: Harness check (no model)
+        run: .venv/bin/python -m campaign_agent bench --oracle --split all --check --out nightly/oracle
+      - name: Real model on the development split
+        run: .venv/bin/python -m campaign_agent bench --split dev --runs 2 --check --out nightly/dev
+      - name: Report
+        if: always()
+        run: |
+          [ ! -f nightly/dev.md ] || cat nightly/dev.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-benchmark
+          path: nightly/
+          retention-days: 30

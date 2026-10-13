@@ -89,6 +89,16 @@ def _bench(args: argparse.Namespace, settings: Settings) -> int:
     out = args.out or Path("benchmarks/results") / f"{time.strftime('%Y%m%d-%H%M%S')}-{model}"
     json_path, md_path = write_report(report, out)
     print(f"report: {md_path}\ndata:   {json_path}")
+    if args.check:
+        missed = [
+            f"research {label}: {t['metric']}"
+            for label, block in report["runs"].items()
+            for t in block["targets"]
+            if t["status"] == "NOT MET"
+        ]
+        for line in missed:
+            print(f"NOT MET  {line}", file=sys.stderr)
+        return 1 if missed else 0
     return 0
 
 
@@ -184,6 +194,9 @@ def main(argv: list[str] | None = None) -> int:
     bench.add_argument("--oracle", action="store_true", help="answer with the gold patch, no model")
     bench.add_argument("--limit", type=int, default=None, help="only the first N cases")
     bench.add_argument("--out", type=Path, default=None, help="report path, without extension")
+    bench.add_argument(
+        "--check", action="store_true", help="exit 1 when a target with a fixed limit is not met"
+    )
     args = parser.parse_args(argv)
     settings = load_settings()
     if args.command == "bench":
