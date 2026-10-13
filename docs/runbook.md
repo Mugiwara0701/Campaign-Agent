@@ -111,12 +111,31 @@ pointer. To go back to an earlier campaign version use the `rollback` request fr
 | A request fails with `internal_error` or `worker_crashed` | `campaign_request.error_code`, the logs around its id | one bad request does not stop the worker; send it again; if it repeats, keep the request id and the log lines for a bug report (the logs hold no user text) |
 | Requests refused with `rate_limited` | the requester in `campaign_request` | a requester sent more than `RATE_LIMIT_PER_MINUTE` in a minute; it clears by itself, and a loop in the dashboard is the usual cause |
 | Candidate cannot be approved: level 6 fails | the version's validation report | the Marketing Agent's loader rejected the file: fix the campaign, or the MA checkout is the wrong version (`MA_CHECKOUT`) |
-| Level 6 `skipped` although it is needed | `MA_CHECKOUT` unset, or the machine cannot create a network namespace | set `MA_CHECKOUT`; check `unshare --net --map-root-user true` works as the service account; `MA_REQUIRED=true` makes this a failure instead of a skip |
+| Level 6 `skipped` although it is needed | the reason is printed under the candidate by `try` (`L6 skipped: ...`) and stored in the version's validation report | `MA_CHECKOUT` unset or wrong: fix it, `push-env`, `up`. "cannot start a process without network access": check `unshare --net --map-root-user true` as the service account. On **Ubuntu 24.04** it fails with `uid_map: Operation not permitted` until an administrator allows it for `unshare` only (below). It can also fail only inside the service if the unit sets `PrivateTmp` (it must not). `MA_REQUIRED=true` makes a skip a failure |
 | Disk full | `df -h`, `journalctl --disk-usage` | the journal is limited to 1 GB by the bootstrap; the model files are the large part (`ollama list`, `ollama rm`) |
 | The machine rebooted | `remote.sh status` | the user service starts by itself (linger is enabled); if not, `sudo loginctl enable-linger campaign-agent` as the administrator |
 
 If the Campaign Agent is down for a long time the **Marketing Agent keeps running the campaign that is live**: nothing the
 agent does is needed for a pass to run. Only new campaigns and edits wait.
+
+### Allowing the level-6 sandbox on Ubuntu 24.04
+
+Ubuntu 24.04 restricts unprivileged user namespaces with AppArmor (`kernel.apparmor_restrict_unprivileged_userns=1`).
+Allow them for the `unshare` program only, as an administrator on the office machine:
+
+```bash
+sudo tee /etc/apparmor.d/unshare >/dev/null <<'EOF'
+abi <abi/4.0>,
+include <tunables/global>
+
+profile unshare /usr/bin/unshare flags=(unconfined) {
+  userns,
+  include if exists <local/unshare>
+}
+EOF
+sudo apparmor_parser -r /etc/apparmor.d/unshare
+bash deploy/remote.sh exec "unshare --net --map-root-user true && echo OK"
+```
 
 ## 5. Routine
 
