@@ -21,9 +21,13 @@ def queries(effective: dict) -> list[str]:  # type: ignore[type-arg]
                 line = " ".join(x for x in (industry, product, tech) if x)
                 if line and line not in seen:
                     seen.append(line)
-    if not seen:  # a campaign that says nothing about its target: the base vocabulary, as the real agent does
+    if (
+        not seen
+    ):  # a campaign that says nothing about its target: the base vocabulary, as the real agent does
         capabilities = (effective.get("search") or {}).get("capabilities") or []
-        seen = [f"{cap} customers" for cap in capabilities[:5]] or ["embedded engineering customers"]
+        seen = [f"{cap} customers" for cap in capabilities[:5]] or [
+            "embedded engineering customers"
+        ]
     return seen[:20]
 
 

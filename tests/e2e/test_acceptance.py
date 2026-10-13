@@ -5,7 +5,7 @@ The flow is the dashboard's: a message, questions, edits, approval; then the sta
 Needs a throwaway PostgreSQL (TEST_DATABASE_URL), like the integration tests.
 """
 
-import subprocess  # noqa: S404
+import subprocess
 import sys
 from pathlib import Path
 
@@ -133,7 +133,9 @@ def test_what_cannot_be_applied_is_reported_and_not_emitted(db, tmp_path) -> Non
     assert "employee" not in yaml_text and "include_countries" not in yaml_text
     stored = versions(db, cid)[0]["not_applied"]
     assert len(stored) == len(view.not_applied)  # the same list is stored with the version
-    assert any("infotainment" in q and "Android" in q for q in stand_in_queries(tmp_path, yaml_text))
+    assert any(
+        "infotainment" in q and "Android" in q for q in stand_in_queries(tmp_path, yaml_text)
+    )
 
 
 def test_a_vague_message_asks_and_the_answer_leads_to_a_reviewable_campaign(db, tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -191,15 +193,29 @@ def test_a_rejected_change_leaves_the_running_campaign_alone(db, tmp_path) -> No
     assert live_version(db, cid) == 1
     running = versions(db, cid)[0]["overlay_yaml"]
 
-    strict = worker_with(db, rejecting_ma(tmp_path), reply(op_json("qualification.min_qualify", 55, "minimum score 55", "set")))
-    send(db, strict, cid, "edit", "e1", {"text": "minimum score 55"}, base=state_row(db, cid)["revision"])
+    strict = worker_with(
+        db,
+        rejecting_ma(tmp_path),
+        reply(op_json("qualification.min_qualify", 55, "minimum score 55", "set")),
+    )
+    send(
+        db,
+        strict,
+        cid,
+        "edit",
+        "e1",
+        {"text": "minimum score 55"},
+        base=state_row(db, cid)["revision"],
+    )
     assert state_row(db, cid)["current_state"] == "VALIDATION_FAILED"
     assert live_version(db, cid) == 1  # version 1 still runs
     assert versions(db, cid)[0]["overlay_yaml"] == running
     assert view_of(db, cid).live_version == 1
 
 
-def test_published_while_the_marketing_agent_is_offline_is_applied_when_it_returns(db, tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_published_while_the_marketing_agent_is_offline_is_applied_when_it_returns(
+    db, tmp_path
+) -> None:  # type: ignore[no-untyped-def]
     w = worker_with(db, MA, ROBOTS)
     cid = start(db, w, ROBOTS_TEXT)
     approve(db, w, cid, "a1")  # the Marketing Agent has never reported anything
@@ -209,7 +225,10 @@ def test_published_while_the_marketing_agent_is_offline_is_applied_when_it_retur
         c.execute(
             "insert into public.ma_campaign_status (supported_contract_versions, current_campaign) "
             "values (%s, %s::jsonb)",
-            (["1.0"], f'{{"id": "{cid}", "version": 1, "sha256": "{sha}", "applied_at": "2026-10-13T00:00:00Z"}}'),
+            (
+                ["1.0"],
+                f'{{"id": "{cid}", "version": 1, "sha256": "{sha}", "applied_at": "2026-10-13T00:00:00Z"}}',
+            ),
         )
     assert refresh_applied(db) is True
     assert view_of(db, cid).applied is True
