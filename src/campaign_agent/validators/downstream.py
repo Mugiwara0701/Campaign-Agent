@@ -66,12 +66,16 @@ def subprocess_runner(
     return RunResult(proc.returncode, (out or "")[:_OUTPUT_CAP], (err or "")[:_OUTPUT_CAP])
 
 
-def network_cut_available(runner: Runner, cwd: Path) -> bool:
+def network_cut_available(
+    runner: Runner, cwd: Path, isolate: tuple[str, ...] = _NO_NETWORK
+) -> bool:
     """Can a child process be started with no network on this machine?"""
-    if shutil.which(_NO_NETWORK[0]) is None:
+    if not isolate:
+        return True  # tests only: the caller chose to run without isolation
+    if shutil.which(isolate[0]) is None:
         return False
     try:
-        result = runner((*_NO_NETWORK, "true"), cwd, {"PATH": os.defpath}, 10.0)
+        result = runner((*isolate, "true"), cwd, {"PATH": os.defpath}, 10.0)
     except OSError:
         return False
     return result.returncode == 0 and not result.timed_out
@@ -90,6 +94,9 @@ class Downstream:
     timeout_s: float = 60.0
     required: bool = False
     runner: Runner = subprocess_runner
+    # The command that cuts the network. Empty means no isolation: for the end-to-end tests, where the stand-in
+    # Marketing Agent runs on a CI machine that may not allow network namespaces. Never empty in the service.
+    isolate: tuple[str, ...] = _NO_NETWORK
 
     def _unavailable(self, note: str) -> LevelResult:
         if self.required:
@@ -103,7 +110,7 @@ class Downstream:
             return self._unavailable("no Marketing Agent checkout is configured (MA_CHECKOUT)")
         if not self.checkout.is_dir():
             return self._unavailable(f"the Marketing Agent checkout {self.checkout} does not exist")
-        if not network_cut_available(self.runner, self.checkout):
+        if not network_cut_available(self.runner, self.checkout, self.isolate):
             return self._unavailable("this machine cannot start a process without network access")
         with tempfile.TemporaryDirectory(prefix="ca-l6-") as tmp:
             path = Path(tmp) / "campaign.yaml"
@@ -115,7 +122,7 @@ class Downstream:
                 "PYTHONDONTWRITEBYTECODE": "1",
             }
             argv = (
-                *_NO_NETWORK,
+                *self.isolate,
                 self.python,
                 *("-m", "agent", "leads", "queries", "--campaign", str(path)),
             )

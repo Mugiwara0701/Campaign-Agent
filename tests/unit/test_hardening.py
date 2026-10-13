@@ -83,3 +83,11 @@ def test_an_error_is_logged_by_class_name_only() -> None:
     entry = json.loads(JsonFormatter().format(record))
     assert entry["error"] == "ValueError"
     assert "hunter2" not in json.dumps(entry) and "robotics" not in json.dumps(entry)
+
+
+def test_the_bench_command_can_gate_on_the_targets(tmp_path: Path) -> None:
+    from campaign_agent.__main__ import main
+
+    out = tmp_path / "gate"
+    assert main(["bench", "--oracle", "--split", "heldout", "--check", "--out", str(out)]) == 0
+    assert out.with_suffix(".md").exists() and out.with_suffix(".json").exists()
