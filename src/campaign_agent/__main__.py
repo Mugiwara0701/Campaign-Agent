@@ -10,6 +10,7 @@ import os
 import signal
 import socket
 import sys
+import time
 from pathlib import Path
 from types import FrameType
 
@@ -58,6 +59,25 @@ def _try(args: argparse.Namespace, settings: Settings) -> int:
         return client.clean() if args.clean else client.session(args.message)
     finally:
         db.close()
+
+
+def _bench(args: argparse.Namespace, settings: Settings) -> int:
+    from campaign_agent.evaluation.run import run_benchmark, write_report
+
+    report = run_benchmark(
+        settings,
+        split=args.split,
+        runs=max(1, args.runs),
+        research=args.research,
+        oracle=args.oracle,
+        limit=args.limit,
+        progress=lambda line: print(line, flush=True),
+    )
+    model = str(report["meta"]["model"].get("model", "model")).replace("/", "_").replace(":", "_")
+    out = args.out or Path("benchmarks/results") / f"{time.strftime('%Y%m%d-%H%M%S')}-{model}"
+    json_path, md_path = write_report(report, out)
+    print(f"report: {md_path}\ndata:   {json_path}")
+    return 0
 
 
 def _serve(command: str, settings: Settings) -> int:
@@ -126,7 +146,7 @@ def _serve(command: str, settings: Settings) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="campaign_agent", description="Campaign Agent")
-    parser.add_argument("command", choices=["start", "once", "migrate", "agent-password", "try"])
+    parser.add_argument("command", choices=["start", "once", "migrate", "agent-password", "try", "bench"])
     parser.add_argument(
         "message", nargs="?", default=None, help="try: the campaign message to send"
     )
@@ -138,8 +158,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--dir", type=Path, default=None, help="migrate: the folder with the .sql files"
     )
+    bench = parser.add_argument_group("bench")
+    bench.add_argument("--split", choices=["dev", "heldout", "all"], default="dev")
+    bench.add_argument("--runs", type=int, default=1, help="repeat the run to measure consistency")
+    bench.add_argument("--research", choices=["off", "on", "both"], default="off")
+    bench.add_argument("--oracle", action="store_true", help="answer with the gold patch, no model")
+    bench.add_argument("--limit", type=int, default=None, help="only the first N cases")
+    bench.add_argument("--out", type=Path, default=None, help="report path, without extension")
     args = parser.parse_args(argv)
     settings = load_settings()
+    if args.command == "bench":
+        return _bench(args, settings)
     if args.command in ("migrate", "agent-password"):
         return _admin(args.command, args, settings)
     if args.command == "try":
