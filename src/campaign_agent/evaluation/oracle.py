@@ -20,7 +20,9 @@ def oracle_adapter(case: Case) -> StubAdapter:
             json.dumps(
                 {
                     "ops": [_op(o) for o in turn.ops],
-                    "unsupported": [{"request": u.request, "kind": u.kind} for u in turn.unsupported],
+                    "unsupported": [
+                        {"request": u.request, "kind": u.kind} for u in turn.unsupported
+                    ],
                     "research_needs": needs if i == 0 else [],
                 }
             )

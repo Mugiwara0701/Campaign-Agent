@@ -146,7 +146,9 @@ def _serve(command: str, settings: Settings) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="campaign_agent", description="Campaign Agent")
-    parser.add_argument("command", choices=["start", "once", "migrate", "agent-password", "try", "bench"])
+    parser.add_argument(
+        "command", choices=["start", "once", "migrate", "agent-password", "try", "bench"]
+    )
     parser.add_argument(
         "message", nargs="?", default=None, help="try: the campaign message to send"
     )

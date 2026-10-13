@@ -94,8 +94,7 @@ def test_the_gold_answers_reproduce_the_gold_campaign_on_every_case(cases: list[
             "must_ask": r.must_ask,
         }
         for r in results
-        if not r.status_matched
-        or (r.expect_status == "ok" and (not r.exact or not r.asked_ok))
+        if not r.status_matched or (r.expect_status == "ok" and (not r.exact or not r.asked_ok))
     ]
     assert not bad, json.dumps(bad, indent=1)
 
@@ -118,7 +117,9 @@ def test_the_oracle_meets_every_target_and_never_breaks_a_rule(cases: list[Case]
 def test_a_complete_case_that_the_model_reads_as_empty_raises_questions(cases: list[Case]) -> None:
     case = next(c for c in cases if c.id == "complete-01")
     silent = case.model_copy(update={"turns": [case.turns[0].model_copy(update={"ops": []})]})
-    result = run_case(case, oracle_extractor(silent))  # the model read nothing; the labels say a lot
+    result = run_case(
+        case, oracle_extractor(silent)
+    )  # the model read nothing; the labels say a lot
     assert not result.exact and result.fn == len(case.turns[0].ops)
     assert result.asked == ["no_area", "no_industry"]  # and the agent would ask for what was said
 
@@ -180,7 +181,12 @@ def test_writing_to_a_field_that_may_not_be_written_counts_as_unsupported_genera
 ) -> None:
     case = next(c for c in cases if c.id == "adversarial-approval-01")
     turn = case.turns[0]
-    bad_op = {"path": "approval.required", "op": "set", "value": False, "quote": "disable email approval"}
+    bad_op = {
+        "path": "approval.required",
+        "op": "set",
+        "value": False,
+        "quote": "disable email approval",
+    }
     adapter = oracle_adapter(case)
     reply = json.loads(adapter.replies[0])  # type: ignore[arg-type]
     reply["ops"].append(
@@ -278,7 +284,9 @@ class _Search:
 
 class _Fetch:
     def fetch(self, url: str) -> Page:
-        return Page(url, "Yocto builds embedded Linux images for devices such as set-top box units.")
+        return Page(
+            url, "Yocto builds embedded Linux images for devices such as set-top box units."
+        )
 
 
 def test_research_is_measured_against_the_labelled_good_values(cases: list[Case]) -> None:
@@ -339,7 +347,13 @@ def test_a_full_oracle_run_writes_a_report(tmp_path: Path) -> None:
 def test_repeated_runs_report_consistency() -> None:
     settings = Settings(_env_file=None)  # type: ignore[call-arg]
     report = run_benchmark(
-        settings, dataset=DATASET, split="dev", runs=2, oracle=True, limit=5, progress=lambda _l: None
+        settings,
+        dataset=DATASET,
+        split="dev",
+        runs=2,
+        oracle=True,
+        limit=5,
+        progress=lambda _l: None,
     )
     assert report["runs"]["off"]["consistency"] == 1.0
 

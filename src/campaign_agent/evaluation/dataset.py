@@ -67,7 +67,9 @@ class Case(_C):
     turns: list[Turn] = Field(min_length=1)
     base: list[GoldOp] = Field(default_factory=list)  # set directly (confirmed) before turn 1
     must_ask: list[str] = Field(default_factory=list)  # gap reasons expected after the last turn
-    forbidden_paths: list[str] = Field(default_factory=list)  # path prefixes that must stay untouched
+    forbidden_paths: list[str] = Field(
+        default_factory=list
+    )  # path prefixes that must stay untouched
     expect_status: Expected = "ok"
     research: list[GoldResearch] = Field(default_factory=list)
     note: str = ""

@@ -164,9 +164,8 @@ def run_case(
     result.prompt_tokens = sum(a.prompt_tokens or 0 for a in attempts_all)
     result.completion_tokens = sum(a.completion_tokens or 0 for a in attempts_all)
     result.repairs = sum(1 for a in attempts_all if a.kind == "repair")
-    result.first_try_valid = (
-        result.statuses == ["ok"] * len(case.turns)
-        and not any(a.kind in _REPAIRING for a in attempts_all)
+    result.first_try_valid = result.statuses == ["ok"] * len(case.turns) and not any(
+        a.kind in _REPAIRING for a in attempts_all
     )
     if case.expect_status != "ok" or result.statuses[-1] != "ok":
         return result

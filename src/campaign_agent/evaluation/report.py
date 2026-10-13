@@ -42,9 +42,13 @@ def summarize(results: Iterable[CaseResult]) -> dict[str, Any]:
         "schema_validity": _rate(len(scored), len(ok_cases)),
         "first_try_validity": _rate(sum(r.first_try_valid for r in ok_cases), len(ok_cases)),
         "repairs_per_case": _rate(sum(r.repairs for r in ok_cases), len(ok_cases)),
-        "fields": _f1(sum(r.tp for r in scored), sum(r.fp for r in scored), sum(r.fn for r in scored)),
+        "fields": _f1(
+            sum(r.tp for r in scored), sum(r.fp for r in scored), sum(r.fn for r in scored)
+        ),
         "exact_rate": _rate(sum(r.exact for r in scored), len(scored)),
-        "unsupported_generation_rate": _rate(sum(r.unsupported_generated for r in scored), len(scored)),
+        "unsupported_generation_rate": _rate(
+            sum(r.unsupported_generated for r in scored), len(scored)
+        ),
         "forbidden_applied": sum(r.forbidden_applied for r in scored),
         "unsupported_detection_recall": _rate(
             sum(r.unsupported_found for r in unsupported),
@@ -94,7 +98,9 @@ def summarize(results: Iterable[CaseResult]) -> dict[str, Any]:
             "suggestions_stored": stored,
             "suggestion_validity": _rate(stored, produced),
             "good_share": _rate(good, stored),
-            "latency_p50_s": percentile([r.research.latency_s for r in researched if r.research], 0.5),
+            "latency_p50_s": percentile(
+                [r.research.latency_s for r in researched if r.research], 0.5
+            ),
         }
     return out
 
@@ -124,7 +130,12 @@ def targets(
             "le:0.02",
         ),
         ("Missing-field detection recall", ">= 95%", summary["missing_field_recall"], "ge:0.95"),
-        ("Clarification quality (asked and needed)", ">= 90%", summary["clarification_quality"], "ge:0.9"),
+        (
+            "Clarification quality (asked and needed)",
+            ">= 90%",
+            summary["clarification_quality"],
+            "ge:0.9",
+        ),
         ("Research: policy violations reaching the provider", "0", policy_violations, "le:0"),
         (
             "Research: suggestions with valid sources and in-vocabulary values",
@@ -132,7 +143,12 @@ def targets(
             research.get("suggestion_validity"),
             "ge:0.95",
         ),
-        ("Field-level extraction accuracy (F1)", "set after baseline", summary["fields"]["f1"], "base"),
+        (
+            "Field-level extraction accuracy (F1)",
+            "set after baseline",
+            summary["fields"]["f1"],
+            "base",
+        ),
         ("Edit-request correctness", "set after baseline", summary["edit_exact_rate"], "base"),
         (
             "Contradiction / conflict detection",
@@ -184,9 +200,20 @@ def markdown(report: dict[str, Any]) -> str:
         lines += ["| Metric | Target | Measured | Status |", "|---|---|---|---|"]
         for t in block["targets"]:
             value = t["value"]
-            shown = _pct(value) if isinstance(value, float) and t["metric"] != "Research: policy violations reaching the provider" else ("n/a" if value is None else str(value))
+            shown = (
+                _pct(value)
+                if isinstance(value, float)
+                and t["metric"] != "Research: policy violations reaching the provider"
+                else ("n/a" if value is None else str(value))
+            )
             lines.append(f"| {t['metric']} | {t['target']} | {shown} | {t['status']} |")
-        lines += ["", "### By category", "", "| Category | Cases | Exact | Precision | Recall | F1 |", "|---|---|---|---|---|---|"]
+        lines += [
+            "",
+            "### By category",
+            "",
+            "| Category | Cases | Exact | Precision | Recall | F1 |",
+            "|---|---|---|---|---|---|",
+        ]
         for name, c in s["by_category"].items():
             lines.append(
                 f"| {name} | {c['cases']} | {_pct(c.get('exact_rate', c.get('guard_correct_rate')))} | "
@@ -208,11 +235,17 @@ def markdown(report: dict[str, Any]) -> str:
                 f"- Research: {r['cases_with_needs']} cases asked; {r['suggestions_stored']} suggestions stored; "
                 f"{_pct(r['good_share'])} of them are labelled good; median extra latency {_num(r['latency_p50_s'])} s",
             ]
-        failing = [r for r in block["cases"] if r["status_matched"] and not r["exact"] and r["expect_status"] == "ok"]
+        failing = [
+            r
+            for r in block["cases"]
+            if r["status_matched"] and not r["exact"] and r["expect_status"] == "ok"
+        ]
         if failing:
             lines += ["", "### Cases that were not exactly right", ""]
             for r in failing[:40]:
-                lines.append(f"- `{r['id']}` ({r['category']}): missing {r['missing'] or '-'}; extra {r['extra'] or '-'}")
+                lines.append(
+                    f"- `{r['id']}` ({r['category']}): missing {r['missing'] or '-'}; extra {r['extra'] or '-'}"
+                )
         lines.append("")
     if "comparison" in report:
         c = report["comparison"]
