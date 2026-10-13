@@ -104,9 +104,7 @@ returning c.*
 """
 
 
-def count_recent_requests(
-    conn: Conn, requested_by: str, window_s: int, *, except_id: str
-) -> int:
+def count_recent_requests(conn: Conn, requested_by: str, window_s: int, *, except_id: str) -> int:
     """How many requests this requester had picked up in the last `window_s` seconds (this one not counted)."""
     row = conn.execute(
         """

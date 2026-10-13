@@ -102,4 +102,6 @@ def test_the_command_only_counts_without_yes_and_clears_with_it(db, pg_url) -> N
     assert request_row(db, req["id"])["payload"] != {}
     assert run_retention(pg_url, 90, apply=True, out=lines.append) == 0
     assert request_row(db, req["id"])["payload"] == {}
-    assert not any("postgres:" in ln and ":test" in ln for ln in lines)  # the password is never printed
+    assert not any(
+        "postgres:" in ln and ":test" in ln for ln in lines
+    )  # the password is never printed

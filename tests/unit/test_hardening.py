@@ -66,7 +66,10 @@ def test_the_scripts_split_the_work_that_needs_sudo() -> None:
 
 def test_retention_refuses_a_period_that_is_too_short_without_touching_the_database() -> None:
     lines: list[str] = []
-    assert run_retention("postgresql://x:y@127.0.0.1/none", MIN_DAYS - 1, apply=True, out=lines.append) == 2
+    assert (
+        run_retention("postgresql://x:y@127.0.0.1/none", MIN_DAYS - 1, apply=True, out=lines.append)
+        == 2
+    )
     assert lines and "at least" in lines[0]
 
 
@@ -74,7 +77,9 @@ def test_an_error_is_logged_by_class_name_only() -> None:
     try:
         raise ValueError("Find robotics companies and my password is hunter2")
     except ValueError:
-        record = logging.LogRecord("campaign_agent.x", logging.ERROR, "f", 1, "request crashed", (), sys.exc_info())
+        record = logging.LogRecord(
+            "campaign_agent.x", logging.ERROR, "f", 1, "request crashed", (), sys.exc_info()
+        )
     entry = json.loads(JsonFormatter().format(record))
     assert entry["error"] == "ValueError"
     assert "hunter2" not in json.dumps(entry) and "robotics" not in json.dumps(entry)

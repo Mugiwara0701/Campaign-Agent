@@ -164,7 +164,9 @@ def _validate(t: _Turn) -> None:
 # --- helpers ------------------------------------------------------------------------------------------------------
 
 
-MAX_PAYLOAD_CHARS = 100_000  # far above any real request; the text itself is limited further by the input guard
+MAX_PAYLOAD_CHARS = (
+    100_000  # far above any real request; the text itself is limited further by the input guard
+)
 
 
 def _check_size(req: Request) -> None:

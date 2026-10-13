@@ -46,11 +46,11 @@ def clear_old_payloads(db: Database, days: int) -> int:
         return cur.rowcount
 
 
-def run_retention(
-    url: str, days: int, *, apply: bool, out: Callable[[str], None] = print
-) -> int:
+def run_retention(url: str, days: int, *, apply: bool, out: Callable[[str], None] = print) -> int:
     if days < MIN_DAYS:
-        out(f"Not run: keep at least {MIN_DAYS} days (a request may still be retried or investigated).")
+        out(
+            f"Not run: keep at least {MIN_DAYS} days (a request may still be retried or investigated)."
+        )
         return 2
     out(f"database: {describe(url)}")
     db = Database(url)
