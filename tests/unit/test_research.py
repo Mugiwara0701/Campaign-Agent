@@ -384,7 +384,7 @@ def hits(n: int) -> list[SearchHit]:
 def test_zero_blocked_queries_reach_the_search_provider() -> None:
     search = SpySearch(hits(2))
     r = researcher(search, SpyFetcher(), summary_reply(source_urls=["https://docs.example.org/0"]))
-    needs = [need(t) for t in BLOCKED_TERMS if t][:3]  # the model may only send three
+    needs = [need(t) for t in [t for t in BLOCKED_TERMS if t][:3]]  # the model may only send three
     result = r.run(needs, new_ir("c1"))
     assert search.queries == [] and result.suggestions == () and result.searches == 0
     assert all(n.startswith("dropped:") for n in result.notes)
