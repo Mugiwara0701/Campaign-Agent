@@ -150,10 +150,12 @@ function draw(){
   R(40,14,30,20,'#9fd3ff');R(54,14,2,20,'#41375e');R(222,14,30,20,'#9fd3ff');R(236,14,2,20,'#41375e');
   const mgrAsleep=!sim&&(S.worker==='fail'||S.worker==='off');
   mgr.bubble=!sim&&S.paused?'PAUSED':(mgr.bubble==='PAUSED'?'':mgr.bubble);mgr.bcol='#ffd84a';
+  const jobsBusy=!sim&&S.running>0&&!S.paused;   // a request is being worked on (from the dashboard or from this window)
+  if(jobsBusy&&mgr.bubble==='')mgr.bubble='...';else if(!jobsBusy&&mgr.bubble==='...'&&!scene_.thinking)mgr.bubble='';
   desk(24,70,76);monitor(36,52,!sim&&S.model==='fail'?'fail':(mgrAsleep||(!sim&&S.paused)?'off':'ok'),t);monitor(66,52,mgrAsleep||(!sim&&S.paused)?'off':'ok',t+30);
   cabinet(118,52,sim?'ok':S.db);lamp(18,50,sim||S.model==='ok');
   if(S.waiting&&!sim)letters(30,90,S.waiting);
-  if(scene_.thinking)paper(80,76,1+Math.floor(t/12)%5);else if(scene_.fileOnDesk)paper(80,76,5);
+  if(scene_.thinking||jobsBusy)paper(80,76,1+Math.floor(t/12)%5);else if(scene_.fileOnDesk)paper(80,76,5);
   desk(208,70,76);monitor(222,52,scene_.maWorking?'ok':'off',t);if(scene_.maWorking&&emp.sit){paper(262,76,3,'#2f9e5b')}
   cable(sim?'ok':S.link,t,scene_.maWorking||!!scene_.token);
   c.fillStyle='#f8f4e8';c.fillText('TAILSCALE',134,184);
@@ -374,6 +376,31 @@ function eventScene(k){
   else if(code==='MA_PASS_FINISHED'&&/finished$/.test(msg))scene(()=>empDone());
   else if(code==='MA_PASS_FINISHED')scene(()=>say('EMPLOYEE',msg+'.'));
 }
+// Requests that come from outside this window (the dashboard, the CA's own automatic start): the manager says so, so the office
+// shows the work as it happens and not only what is typed in here. The ones sent from this window are narrated by its own flow.
+const JOBS={seen:null,ours:new Set(['ceo-window','dev-client'])};
+const JOB_WHAT={interpret:'a new campaign',answer:'answers to my questions',edit:'a change',approve:'an approval',discard:'a rejection',rollback:'a rollback',deactivate:'a switch-off',suggestion:'a suggestion'};
+function watchJobs(d){
+  const jobs=d.jobs||[];
+  if(JOBS.seen===null){JOBS.seen=new Map(jobs.map(j=>[j.id,j.status]));return}   // the first look: what is already there is not news
+  [...jobs].reverse().forEach(j=>{                                                // oldest first
+    const was=JOBS.seen.get(j.id);JOBS.seen.set(j.id,j.status);
+    if(SIM.on||VERIFYING.on||JOBS.ours.has(j.by)||was===j.status)return;
+    const what=JOB_WHAT[j.type]||j.type,name=j.name?' "'+j.name+'"':'';
+    const who=String(j.by||'').startsWith('campaign-agent')?'the dashboard (I found it myself)':String(j.by||'someone').split('@')[0];
+    if(was===undefined&&(j.status==='pending'||j.status==='processing'||j.age_s<180)){
+      scene(async()=>{mgr.bubble='mail!';mgr.bcol='#ffd84a';await say('MANAGER','A letter from the dashboard: '+what+name+', sent by '+who+'. I am on it.')});
+    }
+    if(j.status==='processing'&&was!=='processing')scene(()=>say('MANAGER','Reading '+what+name+' now. My model runs on this machine, so it takes a few minutes.'));
+    if(j.status==='done'&&was!=='done'){
+      const next={AWAITING_REVIEW:'The leadgen file is ready. Please review it and approve or change it in the dashboard.',
+        CLARIFICATION_REQUIRED:'I need answers to my questions. Please answer them in the dashboard.',
+        PUBLISHED:'It is live now.',VALIDATION_FAILED:'The checks failed. Please look at them in the dashboard.'}[j.state];
+      scene(async()=>{mgr.bubble='';scene_.fileOnDesk=j.state==='AWAITING_REVIEW';await say('MANAGER','Finished '+what+name+'. '+(next||''))});
+    }
+    if(j.status==='failed'&&was!=='failed')scene(()=>say('MANAGER','Something went wrong with '+what+name+': '+(j.error||'unknown')+'. It can be sent again.'));
+  });
+}
 function narrate(d){
   if(!seen.lines){
     if(!RESUME.resumed)say('MANAGER','Good morning, sir! Let me look around the office...');
@@ -409,7 +436,7 @@ const VERIFYING={on:false};
 async function poll(){
   if(RESUME.promise&&!seen.lines){await RESUME.promise.catch(()=>{})}   // the first greeting must know whether we resumed
   try{data=await api('/api/state');
-    if(!SIM.on){readState();narrate(data);const p=await api('/api/pipeline').catch(()=>null);if(p){announcePipeline(p.pipeline);F.pipe=p.pipeline}}
+    if(!SIM.on){readState();narrate(data);watchJobs(data);const p=await api('/api/pipeline').catch(()=>null);if(p){announcePipeline(p.pipeline);F.pipe=p.pipeline}}
     $('reqs').textContent=data.requests.length?data.requests.join('\n'):'none';$('evs').textContent=data.events.length?data.events.join('\n'):'none';
     $('panel').innerHTML='';data.lines.forEach(l=>{const r=el('div','','row');r.appendChild(el('span','','dot '+l.state));r.appendChild(el('span',l.name,'nm'));r.appendChild(el('span',l.detail,'dt'));$('panel').appendChild(r)});
   }catch(e){if(!SIM.on&&!seen.lost){seen.lost=true;say('MANAGER','I lost the phone line to this window. The Campaign Agent on this machine is not answering.')}}

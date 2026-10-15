@@ -78,6 +78,7 @@ def create_app(db: Database, settings: Settings, port: int) -> FastAPI:
             "lines": [asdict(line) for line in snap.lines],
             "requests": snap.requests,
             "events": snap.events,
+            "jobs": list(snap.jobs),
         }
 
     @app.get("/api/demo")
