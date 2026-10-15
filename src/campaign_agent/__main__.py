@@ -42,7 +42,9 @@ def _admin(command: str, args: argparse.Namespace, settings: Settings) -> int:
         return 2
     if command == "migrate":
         return run_migrate(url, directory=args.dir, plan_only=args.plan, assume_yes=args.yes)
-    return run_agent_password(url, role="campaign_dashboard" if command == "dashboard-password" else "campaign_agent")
+    return run_agent_password(
+        url, role="campaign_dashboard" if command == "dashboard-password" else "campaign_agent"
+    )
 
 
 def _try(args: argparse.Namespace, settings: Settings) -> int:
@@ -88,7 +90,13 @@ def _ui(args: argparse.Namespace, settings: Settings) -> int:
     from campaign_agent.store.db import Database
 
     db = Database(settings.database_url.get_secret_value()) if settings.database_url else None
-    return run_ui(db, settings, port=args.ui_port, open_window=not args.no_window, fullscreen=not args.windowed)
+    return run_ui(
+        db,
+        settings,
+        port=args.ui_port,
+        open_window=not args.no_window,
+        fullscreen=not args.windowed,
+    )
 
 
 def _api(settings: Settings) -> int:
@@ -103,10 +111,19 @@ def _api(settings: Settings) -> int:
     setup_logging()
     token = settings.api_token.get_secret_value() if settings.api_token else ""
     if settings.api_database_url is None or len(token) < MIN_TOKEN_CHARS:
-        print(f"API_DATABASE_URL and API_TOKEN (at least {MIN_TOKEN_CHARS} characters) must be set", file=sys.stderr)
+        print(
+            f"API_DATABASE_URL and API_TOKEN (at least {MIN_TOKEN_CHARS} characters) must be set",
+            file=sys.stderr,
+        )
         return 2
     app = create_app(Gateway(settings.api_database_url.get_secret_value()), token=token)
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8000")), log_level="warning", access_log=False)  # noqa: S104
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", "8000")),
+        log_level="warning",
+        access_log=False,
+    )  # noqa: S104
     return 0
 
 
@@ -260,7 +277,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="campaign_agent", description="Campaign Agent")
     parser.add_argument(
         "command",
-        choices=["start", "once", "migrate", "agent-password", "dashboard-password", "api", "try", "bench", "retention", "console", "ui", "autopilot"],
+        choices=[
+            "start",
+            "once",
+            "migrate",
+            "agent-password",
+            "dashboard-password",
+            "api",
+            "try",
+            "bench",
+            "retention",
+            "console",
+            "ui",
+            "autopilot",
+        ],
     )
     parser.add_argument(
         "message", nargs="?", default=None, help="try, autopilot: the campaign message to send"
@@ -276,16 +306,43 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--dir", type=Path, default=None, help="migrate: the folder with the .sql files"
     )
-    parser.add_argument("--demo", action="store_true", help="console: play a simulation, not the real state")
+    parser.add_argument(
+        "--demo", action="store_true", help="console: play a simulation, not the real state"
+    )
     parser.add_argument("--snapshot", action="store_true", help="console: print once and exit")
-    parser.add_argument("--message", dest="message_flag", default=None, help="autopilot: the campaign message (the same as giving it as the plain argument)")
-    parser.add_argument("--edit", default=None, help="autopilot: the change to ask for once the file is ready")
-    parser.add_argument("--answer", action="append", help="autopilot: choose the answer containing this text (repeatable; default: the first choice)")
-    parser.add_argument("--start-ma", action="store_true", help="autopilot: once live, press 'Tell the Marketing Agent to start'")
-    parser.add_argument("--no-approve", action="store_true", help="autopilot: stop at the finished file, do not approve")
-    parser.add_argument("--timeout", type=int, default=3600, help="autopilot: give up after this many seconds")
-    parser.add_argument("--no-window", action="store_true", help="ui: only serve the page, do not open Chromium")
-    parser.add_argument("--windowed", action="store_true", help="ui: a normal window instead of full screen")
+    parser.add_argument(
+        "--message",
+        dest="message_flag",
+        default=None,
+        help="autopilot: the campaign message (the same as giving it as the plain argument)",
+    )
+    parser.add_argument(
+        "--edit", default=None, help="autopilot: the change to ask for once the file is ready"
+    )
+    parser.add_argument(
+        "--answer",
+        action="append",
+        help="autopilot: choose the answer containing this text (repeatable; default: the first choice)",
+    )
+    parser.add_argument(
+        "--start-ma",
+        action="store_true",
+        help="autopilot: once live, press 'Tell the Marketing Agent to start'",
+    )
+    parser.add_argument(
+        "--no-approve",
+        action="store_true",
+        help="autopilot: stop at the finished file, do not approve",
+    )
+    parser.add_argument(
+        "--timeout", type=int, default=3600, help="autopilot: give up after this many seconds"
+    )
+    parser.add_argument(
+        "--no-window", action="store_true", help="ui: only serve the page, do not open Chromium"
+    )
+    parser.add_argument(
+        "--windowed", action="store_true", help="ui: a normal window instead of full screen"
+    )
     parser.add_argument("--ui-port", type=int, default=8765, help="ui: the local port")
     bench = parser.add_argument_group("bench")
     bench.add_argument("--split", choices=["dev", "heldout", "all"], default="dev")

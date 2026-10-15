@@ -386,7 +386,9 @@ def _approve(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
             "effective_from": "next_pass",
             "already": True,
         }
-        if start_pipeline:  # approving again with the flag still starts it: the first attempt may have failed
+        if (
+            start_pipeline
+        ):  # approving again with the flag still starts it: the first attempt may have failed
             t.action = Action("start_pipeline", version, sha, req.requested_by, start_pipeline=True)
         return
     if ws.conv.state is State.AWAITING_REVIEW:

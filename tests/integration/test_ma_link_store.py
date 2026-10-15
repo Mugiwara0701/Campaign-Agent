@@ -93,11 +93,15 @@ def test_a_repeating_blocker_updates_one_row_and_counts(db) -> None:  # type: ig
 def test_a_resolved_event_closes_the_open_blocker_and_a_new_one_opens_again(db) -> None:  # type: ignore[no-untyped-def]
     service = LinkService(db)
     service.store_events([make(dedupe_key="chrome")])
-    service.store_events([make(kind="resolved", severity="info", message="back", dedupe_key="chrome")])
+    service.store_events(
+        [make(kind="resolved", severity="info", message="back", dedupe_key="chrome")]
+    )
     blockers = rows(db, "select * from public.ma_event where kind = 'blocker'")
     assert blockers[0]["resolved_at"] is not None
     service.store_events([make(dedupe_key="chrome", message="again")])
-    open_now = rows(db, "select * from public.ma_event where kind = 'blocker' and resolved_at is null")
+    open_now = rows(
+        db, "select * from public.ma_event where kind = 'blocker' and resolved_at is null"
+    )
     assert [r["message"] for r in open_now] == ["again"]
 
 
@@ -113,7 +117,12 @@ def test_old_events_are_pruned_and_open_blockers_are_kept(db) -> None:  # type: 
         [
             make(kind="info", severity="info", code="MA_NOTE", dedupe_key="info-old"),
             make(dedupe_key="open-old"),
-            make(kind="applied", severity="info", code="MA_CAMPAIGN_APPLIED", dedupe_key="applied-old"),
+            make(
+                kind="applied",
+                severity="info",
+                code="MA_CAMPAIGN_APPLIED",
+                dedupe_key="applied-old",
+            ),
         ]
     )
     with db.transaction() as c:
@@ -178,7 +187,9 @@ def test_a_closed_blocker_leaves_the_view(db) -> None:  # type: ignore[no-untype
     service = LinkService(db)
     service.store_events([make(dedupe_key="chrome")])
     refresh_applied(db)
-    service.store_events([make(kind="resolved", severity="info", message="ok", dedupe_key="chrome")])
+    service.store_events(
+        [make(kind="resolved", severity="info", message="ok", dedupe_key="chrome")]
+    )
     refresh_applied(db)
     view = ReviewView.model_validate(state_row(db, cid)["review_view"])
     assert view.ma_events == ()
@@ -218,7 +229,12 @@ def test_the_agent_may_only_change_the_columns_it_needs(pg_url, db) -> None:  # 
     try:
         conn.execute("update public.ma_event set message = 'ok', resolved_at = now()")
         conn.rollback()
-        for column in ("event_id = gen_random_uuid()", "kind = 'info'", "code = 'MA_OTHER'", "received_at = now()"):
+        for column in (
+            "event_id = gen_random_uuid()",
+            "kind = 'info'",
+            "code = 'MA_OTHER'",
+            "received_at = now()",
+        ):
             with pytest.raises(DENIED):
                 conn.execute(f"update public.ma_event set {column}")  # noqa: S608
             conn.rollback()

@@ -98,7 +98,11 @@ def test_an_approval_can_ask_for_the_pipeline_to_start_after_the_publish() -> No
     ws = reviewing()
     out = approve(ws, start_pipeline=True)
     assert out.error is None and out.conv.state is State.PUBLISHED
-    assert out.action is not None and out.action.kind == "publish" and out.action.start_pipeline is True
+    assert (
+        out.action is not None
+        and out.action.kind == "publish"
+        and out.action.start_pipeline is True
+    )
 
 
 def test_without_the_flag_an_approval_starts_nothing() -> None:

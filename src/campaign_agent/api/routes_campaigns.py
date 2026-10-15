@@ -30,5 +30,3 @@ def make_router(gateway: Gateway, guard: Any) -> APIRouter:
         return gateway.campaign(str(campaign_id))
 
     return router
-
-

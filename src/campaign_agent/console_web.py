@@ -30,6 +30,7 @@ HOST = "127.0.0.1"
 CACHE_S = 3.0
 CHROMIUM_NAMES = ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable")
 
+
 def create_app(db: Database, settings: Settings, port: int) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     allowed = {f"{HOST}:{port}", f"localhost:{port}"}
@@ -42,12 +43,15 @@ def create_app(db: Database, settings: Settings, port: int) -> FastAPI:
             return JSONResponse({"error": "forbidden"}, status_code=403)
         if request.method == "POST" and (
             request.headers.get("x-ca-window") != "1"
-            or request.headers.get("origin", f"http://{request.headers.get('host')}") not in {f"http://{h}" for h in allowed}
+            or request.headers.get("origin", f"http://{request.headers.get('host')}")
+            not in {f"http://{h}" for h in allowed}
         ):
             return JSONResponse({"error": "forbidden"}, status_code=403)
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store"
-        response.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+        )
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
 
@@ -70,7 +74,11 @@ def create_app(db: Database, settings: Settings, port: int) -> FastAPI:
                         fresh.close()
                 cache["at"] = time.monotonic()
             snap = cache["snap"]
-        return {"lines": [asdict(line) for line in snap.lines], "requests": snap.requests, "events": snap.events}
+        return {
+            "lines": [asdict(line) for line in snap.lines],
+            "requests": snap.requests,
+            "events": snap.events,
+        }
 
     @app.get("/api/demo")
     def demo() -> list[list[Any]]:
@@ -80,7 +88,9 @@ def create_app(db: Database, settings: Settings, port: int) -> FastAPI:
     def own_db(admin: bool) -> Database:
         # The CEO box stands in for the dashboard, which owns the campaign rows: like `try`, it uses the dev connection
         # (MIGRATE_DATABASE_URL, else DATABASE_URL). Everything the Campaign Agent does for itself uses its own role.
-        url = (getattr(settings, "migrate_database_url", None) if admin else None) or getattr(settings, "database_url", None)
+        url = (getattr(settings, "migrate_database_url", None) if admin else None) or getattr(
+            settings, "database_url", None
+        )
         return Database(url.get_secret_value()) if url else db
 
     def guarded(fn: Any, *args: Any, admin: bool = False) -> Any:
@@ -95,7 +105,9 @@ def create_app(db: Database, settings: Settings, port: int) -> FastAPI:
 
     @app.post("/api/campaigns")
     def new_campaign(body: dict[str, Any] = Body(...)) -> dict[str, str]:  # noqa: B008
-        return {"campaign_id": guarded(console_flow.start, str(body.get("message", "")), admin=True)}
+        return {
+            "campaign_id": guarded(console_flow.start, str(body.get("message", "")), admin=True)
+        }
 
     @app.get("/api/campaigns/latest")
     def campaign_latest() -> dict[str, Any]:
@@ -103,7 +115,7 @@ def create_app(db: Database, settings: Settings, port: int) -> FastAPI:
 
     @app.get("/api/campaigns/{campaign_id}")
     def campaign_status(campaign_id: str) -> dict[str, Any]:
-        return guarded(console_flow.status, campaign_id)   # type: ignore[no-any-return]
+        return guarded(console_flow.status, campaign_id)  # type: ignore[no-any-return]
 
     @app.post("/api/campaigns/{campaign_id}/answer")
     def campaign_answer(campaign_id: str, body: dict[str, Any] = Body(...)) -> dict[str, bool]:  # noqa: B008
@@ -135,7 +147,9 @@ def create_app(db: Database, settings: Settings, port: int) -> FastAPI:
             "edit": " ".join(str(body.get("edit") or "").split())[:2000] or None,
             "approve": bool(body.get("approve", True)),
             "start": bool(body.get("start", False)),
-            "answers": [str(a)[:100] for a in answers][:10] if isinstance(answers, list) else "first",
+            "answers": [str(a)[:100] for a in answers][:10]
+            if isinstance(answers, list)
+            else "first",
             "timeout": max(60, min(int(body.get("timeout", 3600)), 7200)),
         }
         assert set(plan) >= set(PLAN_KEYS)  # noqa: S101
@@ -146,20 +160,35 @@ def create_app(db: Database, settings: Settings, port: int) -> FastAPI:
     def autopilot_status() -> dict[str, Any]:
         # a plan is handed to the window once ("waiting"); after that the window reports progress
         plan = autopilot["plan"] if autopilot["state"] == "waiting" else None
-        return {"plan": plan, "id": (autopilot["plan"] or {}).get("id"), "state": autopilot["state"], "log": autopilot["log"]}
+        return {
+            "plan": plan,
+            "id": (autopilot["plan"] or {}).get("id"),
+            "state": autopilot["state"],
+            "log": autopilot["log"],
+        }
 
     @app.post("/api/autopilot/progress")
     def autopilot_progress(body: dict[str, Any] = Body(...)) -> dict[str, bool]:  # noqa: B008
         if not autopilot["plan"] or body.get("id") != autopilot["plan"]["id"]:
             raise HTTPException(status_code=404, detail="no such run")
         state = str(body.get("state", "running"))
-        autopilot["log"].append({"at": time.strftime("%H:%M:%S"), "line": str(body.get("line", ""))[:300], "state": state})
+        autopilot["log"].append(
+            {
+                "at": time.strftime("%H:%M:%S"),
+                "line": str(body.get("line", ""))[:300],
+                "state": state,
+            }
+        )
         autopilot["state"] = state if state in ("done", "failed") else "running"
         return {"ok": True}
 
     @app.post("/api/campaigns/{campaign_id}/approve")
-    def campaign_approve(campaign_id: str, body: dict[str, Any] = Body(default={})) -> dict[str, bool]:  # noqa: B008
-        guarded(console_flow.approve, campaign_id, bool(body.get("start_pipeline", False)), admin=True)
+    def campaign_approve(
+        campaign_id: str, body: dict[str, Any] = Body(default={})
+    ) -> dict[str, bool]:  # noqa: B008
+        guarded(
+            console_flow.approve, campaign_id, bool(body.get("start_pipeline", False)), admin=True
+        )
         return {"ok": True}
 
     @app.get("/api/ca-control")
@@ -199,13 +228,17 @@ def server_is_up(port: int) -> bool:
 
 def window_is_open(url: str, run: Any = subprocess.run) -> bool:
     """Is a Chromium app window for this address already open? (Chromium opens one more window per launch.)"""
-    return run(["pgrep", "-f", "--", f"--app={url}"], capture_output=True, check=False).returncode == 0
+    return (
+        run(["pgrep", "-f", "--", f"--app={url}"], capture_output=True, check=False).returncode == 0
+    )
 
 
 HANDOFF_S = 5.0
 
 
-def window_closed(window: "subprocess.Popen[bytes] | None", started: float, now: float | None = None) -> bool:
+def window_closed(
+    window: "subprocess.Popen[bytes] | None", started: float, now: float | None = None
+) -> bool:
     """The person closed the window, so the app quits. A Chromium that exits within a few seconds only handed the
     page to a window that is already open: then the server keeps running for that window."""
     if window is None or window.poll() is None:
@@ -226,7 +259,12 @@ def window_command(browser: str, url: str, *, fullscreen: bool = True) -> list[s
 
 
 def run_ui(
-    db: Database | None, settings: Settings, *, port: int = 8765, open_window: bool = True, fullscreen: bool = True
+    db: Database | None,
+    settings: Settings,
+    *,
+    port: int = 8765,
+    open_window: bool = True,
+    fullscreen: bool = True,
 ) -> int:
     import sys
 
@@ -237,22 +275,37 @@ def run_ui(
         url = f"http://{HOST}:{port}/"
         print(f"The Campaign Agent window is already running: {url}")
         if open_window and not window_is_open(url) and (browser := find_chromium()):
-            subprocess.Popen(window_command(browser, url, fullscreen=fullscreen), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)  # noqa: S603
+            subprocess.Popen(
+                window_command(browser, url, fullscreen=fullscreen),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )  # noqa: S603
         db.close()
         return 0
     server = uvicorn.Server(
-        uvicorn.Config(create_app(db, settings, port), host=HOST, port=port, log_level="warning", access_log=False)
+        uvicorn.Config(
+            create_app(db, settings, port),
+            host=HOST,
+            port=port,
+            log_level="warning",
+            access_log=False,
+        )
     )
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     while not server.started and thread.is_alive():
         time.sleep(0.1)
     if not server.started:
-        print(f"could not listen on {HOST}:{port} (is another window already open?)", file=sys.stderr)
+        print(
+            f"could not listen on {HOST}:{port} (is another window already open?)", file=sys.stderr
+        )
         return 1
     url = f"http://{HOST}:{port}/"
     browser = find_chromium() if open_window and not window_is_open(url) else None
-    print(f"Campaign Agent window: {url}" + ("" if browser or not open_window else "  (Chromium not found: open it yourself)"))
+    print(
+        f"Campaign Agent window: {url}"
+        + ("" if browser or not open_window else "  (Chromium not found: open it yourself)")
+    )
     window: subprocess.Popen[bytes] | None = None
     started = time.monotonic()
     try:

@@ -227,7 +227,11 @@ def run_agent_password(
     out(f"database: {describe(url)}")
     out(
         f"Sets the login password of the limited '{role}' role "
-        + ("(the worker uses it, not the owner)." if role == "campaign_agent" else "(the dashboard gateway uses it, not the owner).")
+        + (
+            "(the worker uses it, not the owner)."
+            if role == "campaign_agent"
+            else "(the dashboard gateway uses it, not the owner)."
+        )
     )
     out('Make a good one with:  python3 -c "import secrets; print(secrets.token_urlsafe(24))"')
     first = prompt("New password (not shown): ")
@@ -251,6 +255,8 @@ def run_agent_password(
         )
         out(f"  DATABASE_URL={agent_url_hint(url)}")
     else:
-        out("Done. Put it in the gateway's environment on Render (never in the dashboard's browser code):")
+        out(
+            "Done. Put it in the gateway's environment on Render (never in the dashboard's browser code):"
+        )
         out(f"  API_DATABASE_URL={agent_url_hint(url, role)}")
     return 0

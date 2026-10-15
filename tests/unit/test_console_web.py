@@ -32,7 +32,10 @@ def test_page_marks_the_demo_as_simulated() -> None:
 
 
 def test_find_chromium_takes_the_first_installed() -> None:
-    assert find_chromium(lambda n: "/usr/bin/chromium-browser" if n == "chromium-browser" else None) == "/usr/bin/chromium-browser"
+    assert (
+        find_chromium(lambda n: "/usr/bin/chromium-browser" if n == "chromium-browser" else None)
+        == "/usr/bin/chromium-browser"
+    )
     assert find_chromium(lambda n: None) is None
 
 
@@ -71,10 +74,23 @@ def test_closing_the_window_quits_but_a_quick_handoff_does_not() -> None:
 
 def test_writes_need_the_window_header_and_the_same_origin(monkeypatch: Any) -> None:
     c = _client(monkeypatch)
-    monkeypatch.setattr("campaign_agent.console_web.console_flow.start", lambda db, message: "cid-1")
+    monkeypatch.setattr(
+        "campaign_agent.console_web.console_flow.start", lambda db, message: "cid-1"
+    )
     assert c.post("/api/campaigns", json={"message": "x"}).status_code == 403
-    assert c.post("/api/campaigns", json={"message": "x"}, headers={"x-ca-window": "1", "origin": "http://evil.example"}).status_code == 403
-    ok = c.post("/api/campaigns", json={"message": "x"}, headers={"x-ca-window": "1", "origin": "http://127.0.0.1:8765"})
+    assert (
+        c.post(
+            "/api/campaigns",
+            json={"message": "x"},
+            headers={"x-ca-window": "1", "origin": "http://evil.example"},
+        ).status_code
+        == 403
+    )
+    ok = c.post(
+        "/api/campaigns",
+        json={"message": "x"},
+        headers={"x-ca-window": "1", "origin": "http://127.0.0.1:8765"},
+    )
     assert ok.status_code == 200 and ok.json() == {"campaign_id": "cid-1"}
 
 
@@ -97,7 +113,9 @@ def test_a_long_campaign_message_gets_a_short_name_cut_between_words() -> None:
     name = short_name(text)
     assert len(name) <= 63 and name.endswith("...") and not name.removesuffix("...").endswith(" ")
     assert text.startswith(name.removesuffix("..."))
-    assert text.split(name.removesuffix("..."))[1].startswith(" ")  # it stopped at a space, not inside "Germany"
+    assert text.split(name.removesuffix("..."))[1].startswith(
+        " "
+    )  # it stopped at a space, not inside "Germany"
     assert short_name("short one") == "short one"
 
 
@@ -106,4 +124,6 @@ def test_the_window_opens_full_screen_unless_told_otherwise() -> None:
 
     full = window_command("/usr/bin/google-chrome", "http://127.0.0.1:8765/")
     assert "--start-fullscreen" in full and "--app=http://127.0.0.1:8765/" in full
-    assert "--start-fullscreen" not in window_command("chrome", "http://127.0.0.1:8765/", fullscreen=False)
+    assert "--start-fullscreen" not in window_command(
+        "chrome", "http://127.0.0.1:8765/", fullscreen=False
+    )

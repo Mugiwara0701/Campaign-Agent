@@ -87,7 +87,8 @@ def status(db: Database, campaign_id: str) -> dict[str, Any]:
         "state": state["current_state"] if state else "NEW",
         "busy": bool(request and request["status"] in ("pending", "processing")),
         "failed": request["error_code"] if request and request["status"] == "failed" else None,
-        "gone": state is None and request is None,  # no state and no request: the campaign was deleted
+        "gone": state is None
+        and request is None,  # no state and no request: the campaign was deleted
         "questions": [],
         "candidate": None,
         "notes": [],
@@ -110,7 +111,9 @@ def status(db: Database, campaign_id: str) -> dict[str, Any]:
         if view.candidate is not None:
             out["candidate"] = {
                 "version": view.candidate.version,
-                "levels": [{"level": lv.level, "status": lv.status} for lv in view.candidate.levels],
+                "levels": [
+                    {"level": lv.level, "status": lv.status} for lv in view.candidate.levels
+                ],
                 "yaml": view.candidate.yaml[:4000],
             }
         # what the request asked for but the Marketing Agent cannot fully do (a country is only a search hint)
@@ -167,7 +170,11 @@ def approve(db: Database, campaign_id: str, start_pipeline: bool = False) -> Non
         db,
         campaign_id,
         "approve",
-        {"version": view.candidate.version, "sha256": view.candidate.sha256, "start_pipeline": start_pipeline},
+        {
+            "version": view.candidate.version,
+            "sha256": view.candidate.sha256,
+            "start_pipeline": start_pipeline,
+        },
     )
 
 

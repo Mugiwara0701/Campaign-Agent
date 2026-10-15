@@ -38,10 +38,12 @@ def create_app(gateway: Gateway, *, token: str) -> FastAPI:
     @app.exception_handler(psycopg.errors.InsufficientPrivilege)
     async def _not_set_up(_request: Request, exc: Exception) -> JSONResponse:
         log.warning("the database is not set up for this call: %s", type(exc).__name__)
-        return JSONResponse({"detail": "the database is not set up for this (a migration is missing)"}, status_code=503)
+        return JSONResponse(
+            {"detail": "the database is not set up for this (a migration is missing)"},
+            status_code=503,
+        )
 
     app.include_router(routes_health.router)
     app.include_router(routes_campaigns.make_router(gateway, guard))
     app.include_router(routes_jobs.make_router(gateway, guard))
     return app
-

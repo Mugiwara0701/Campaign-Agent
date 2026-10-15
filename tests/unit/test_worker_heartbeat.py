@@ -86,7 +86,9 @@ def test_stop_does_not_wait_for_a_heartbeat_stuck_in_a_network_call(monkeypatch:
             StuckDb.closed_by_main = True
 
     monkeypatch.setattr(worker_module, "process_next", lambda db, svc, cfg: False)
-    monkeypatch.setattr(worker_module, "refresh_applied", lambda db: None)  # an idle cycle looks at the MA's report
+    monkeypatch.setattr(
+        worker_module, "refresh_applied", lambda db: None
+    )  # an idle cycle looks at the MA's report
     monkeypatch.setattr(worker_module.repo, "beat", lambda conn, **kw: None)
     w = Worker(_Db(), None, _RunCfg(), model_name="m", poll_interval_s=0.01)  # type: ignore[arg-type]
     w._db = type("Main", (_Db,), {"clone": lambda self: StuckDb()})()  # type: ignore[assignment]
@@ -105,9 +107,15 @@ def test_a_paused_worker_takes_no_request_and_says_so(monkeypatch: Any) -> None:
     beats: list[str] = []
     told: list[str] = []
     monkeypatch.setattr(worker_module.repo, "read_control", lambda conn: Control("paused", None))
-    monkeypatch.setattr(worker_module.repo, "report_actual_state", lambda conn, state: told.append(state))
+    monkeypatch.setattr(
+        worker_module.repo, "report_actual_state", lambda conn, state: told.append(state)
+    )
     monkeypatch.setattr(worker_module.repo, "beat", lambda conn, **kw: beats.append(kw["status"]))
-    monkeypatch.setattr(worker_module, "process_next", lambda db, svc, cfg: pytest.fail("a request was taken while paused"))
+    monkeypatch.setattr(
+        worker_module,
+        "process_next",
+        lambda db, svc, cfg: pytest.fail("a request was taken while paused"),
+    )
     w = Worker(_Db(), None, _RunCfg(), model_name="m", poll_interval_s=0.01)  # type: ignore[arg-type]
     assert [w.run_once(), w.run_once(), w.run_once()] == [False, False, False]
     assert beats == ["paused"] * 3
@@ -118,10 +126,16 @@ def test_resuming_takes_requests_again_and_tells_the_dashboard(monkeypatch: Any)
     wish = {"state": "paused"}
     told: list[str] = []
     taken: list[int] = []
-    monkeypatch.setattr(worker_module.repo, "read_control", lambda conn: Control(wish["state"], None))
-    monkeypatch.setattr(worker_module.repo, "report_actual_state", lambda conn, state: told.append(state))
+    monkeypatch.setattr(
+        worker_module.repo, "read_control", lambda conn: Control(wish["state"], None)
+    )
+    monkeypatch.setattr(
+        worker_module.repo, "report_actual_state", lambda conn, state: told.append(state)
+    )
     monkeypatch.setattr(worker_module.repo, "beat", lambda conn, **kw: None)
-    monkeypatch.setattr(worker_module, "process_next", lambda db, svc, cfg: bool(taken.append(1) or True))
+    monkeypatch.setattr(
+        worker_module, "process_next", lambda db, svc, cfg: bool(taken.append(1) or True)
+    )
     w = Worker(_Db(), None, _RunCfg(), model_name="m", poll_interval_s=0.01)  # type: ignore[arg-type]
     w.run_once()
     assert taken == []
@@ -170,18 +184,26 @@ class _Marketing:
         self.resume = value
 
 
-def _worker_with(monkeypatch: Any, ma: _Marketing, wish: dict[str, str], clock: Any = None) -> Worker:
-    monkeypatch.setattr(worker_module.repo, "read_control", lambda conn: Control(wish["state"], ma.resume))
+def _worker_with(
+    monkeypatch: Any, ma: _Marketing, wish: dict[str, str], clock: Any = None
+) -> Worker:
+    monkeypatch.setattr(
+        worker_module.repo, "read_control", lambda conn: Control(wish["state"], ma.resume)
+    )
     monkeypatch.setattr(worker_module.repo, "pipeline_state", ma.state)
     monkeypatch.setattr(worker_module.repo, "request_pipeline", ma.request)
     monkeypatch.setattr(worker_module.repo, "set_ma_resume", lambda conn, v: ma.set_resume(conn, v))
     monkeypatch.setattr(worker_module.repo, "beat", lambda conn, **kw: None)
     monkeypatch.setattr(worker_module, "process_next", lambda db, svc, cfg: False)
     monkeypatch.setattr(worker_module, "refresh_applied", lambda db: None)
-    return Worker(_Db(), None, None, model_name="m", poll_interval_s=0.01, clock=clock or time.monotonic)  # type: ignore[arg-type]
+    return Worker(
+        _Db(), None, None, model_name="m", poll_interval_s=0.01, clock=clock or time.monotonic
+    )  # type: ignore[arg-type]
 
 
-def test_pausing_the_campaign_agent_stops_a_running_marketing_agent_and_remembers_it(monkeypatch: Any) -> None:
+def test_pausing_the_campaign_agent_stops_a_running_marketing_agent_and_remembers_it(
+    monkeypatch: Any,
+) -> None:
     ma, wish = _Marketing(running=True), {"state": "paused"}
     w = _worker_with(monkeypatch, ma, wish)
     w.run_once()
@@ -195,14 +217,18 @@ def test_resuming_starts_it_again_once_and_only_if_it_was_running(monkeypatch: A
     wish["state"] = "running"
     w.run_once()
     w.run_once()
-    assert ma.asked == ["stopped", "running"] and ma.resume is False  # started once, not on every cycle
+    assert (
+        ma.asked == ["stopped", "running"] and ma.resume is False
+    )  # started once, not on every cycle
 
     idle, wish2 = _Marketing(running=False), {"state": "paused"}
     w2 = _worker_with(monkeypatch, idle, wish2)
     w2.run_once()
     wish2["state"] = "running"
     w2.run_once()
-    assert idle.asked == [] and idle.running is False  # it was not running, so resuming leaves it stopped
+    assert (
+        idle.asked == [] and idle.running is False
+    )  # it was not running, so resuming leaves it stopped
 
 
 def test_while_paused_someone_starting_the_marketing_agent_is_undone(monkeypatch: Any) -> None:
@@ -233,7 +259,9 @@ class _Cfg:
     auto_interpret_max_age_h = 168
 
 
-def _idle_worker(monkeypatch: Any, found: Any, now: dict[str, float], paused: bool = False) -> tuple[Worker, list[tuple[int, int]]]:
+def _idle_worker(
+    monkeypatch: Any, found: Any, now: dict[str, float], paused: bool = False
+) -> tuple[Worker, list[tuple[int, int]]]:
     calls: list[tuple[int, int]] = []
 
     def sweep(conn: Any, grace: int, max_age: int) -> Any:
@@ -241,7 +269,11 @@ def _idle_worker(monkeypatch: Any, found: Any, now: dict[str, float], paused: bo
         return found
 
     monkeypatch.setattr(worker_module.repo, "auto_interpret_new_campaigns", sweep)
-    monkeypatch.setattr(worker_module.repo, "read_control", lambda conn: Control("paused" if paused else "running", None))
+    monkeypatch.setattr(
+        worker_module.repo,
+        "read_control",
+        lambda conn: Control("paused" if paused else "running", None),
+    )
     monkeypatch.setattr(worker_module.repo, "beat", lambda conn, **kw: None)
     monkeypatch.setattr(worker_module, "process_next", lambda db, svc, cfg: False)
     monkeypatch.setattr(worker_module, "refresh_applied", lambda db: None)
@@ -249,7 +281,9 @@ def _idle_worker(monkeypatch: Any, found: Any, now: dict[str, float], paused: bo
     return w, calls
 
 
-def test_an_idle_worker_looks_for_new_campaigns_every_ten_seconds_not_every_cycle(monkeypatch: Any) -> None:
+def test_an_idle_worker_looks_for_new_campaigns_every_ten_seconds_not_every_cycle(
+    monkeypatch: Any,
+) -> None:
     now = {"t": 0.0}
     w, calls = _idle_worker(monkeypatch, [], now)
     w.run_once()
@@ -267,7 +301,9 @@ def test_a_paused_worker_does_not_start_on_anything(monkeypatch: Any) -> None:
     assert calls == []
 
 
-def test_without_the_migration_it_says_so_once_and_keeps_working(monkeypatch: Any, caplog: Any) -> None:
+def test_without_the_migration_it_says_so_once_and_keeps_working(
+    monkeypatch: Any, caplog: Any
+) -> None:
     now = {"t": 0.0}
     w, calls = _idle_worker(monkeypatch, None, now)
     for t in (0.0, 11.0, 22.0):

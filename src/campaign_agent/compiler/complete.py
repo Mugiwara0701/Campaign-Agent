@@ -35,7 +35,11 @@ class CompleteFile:
 
 @lru_cache(maxsize=1)
 def _base_text() -> str:
-    return resources.files("campaign_agent.contract").joinpath("base_config.yaml").read_text(encoding="utf-8")
+    return (
+        resources.files("campaign_agent.contract")
+        .joinpath("base_config.yaml")
+        .read_text(encoding="utf-8")
+    )
 
 
 def base_raw() -> dict[str, Any]:

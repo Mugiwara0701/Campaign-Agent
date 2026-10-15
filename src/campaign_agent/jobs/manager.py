@@ -243,7 +243,9 @@ def _run_action(conn: Conn, req: Request, action: Action) -> list[str]:
     return [str(c) for c in done.get("superseded", [])]
 
 
-PIPELINE_STOP_WAIT_S = 90.0  # how long a restart waits for a running pass to end before it asks for "running" again
+PIPELINE_STOP_WAIT_S = (
+    90.0  # how long a restart waits for a running pass to end before it asks for "running" again
+)
 
 
 def start_marketing_agent(
@@ -342,7 +344,9 @@ def process_next(db: Database, svc: Services, cfg: ManagerConfig) -> bool:
                 status = repo.release_request(
                     conn, req.id, f"{type(exc).__name__}", cfg.max_attempts
                 )
-        except Exception:  # the clean-up must never take the worker down: the next request is still waiting
+        except (
+            Exception
+        ):  # the clean-up must never take the worker down: the next request is still waiting
             log.exception("could not release the request", extra=context)
             return True
         if status == "gone":

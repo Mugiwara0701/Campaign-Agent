@@ -17,7 +17,9 @@ class _Db:
 class _Pipeline:
     """The Marketing Agent's switch, as the database shows it: a wish and what it does about it."""
 
-    def __init__(self, desired: str, actual: str, *, stops_after: int | None = 0, allowed: bool = True) -> None:
+    def __init__(
+        self, desired: str, actual: str, *, stops_after: int | None = 0, allowed: bool = True
+    ) -> None:
         self.desired, self.actual = desired, actual
         self.stops_after, self.allowed = stops_after, allowed
         self.asked: list[str] = []
@@ -25,7 +27,11 @@ class _Pipeline:
 
     def state(self, conn: Any) -> dict[str, str]:
         self.reads += 1
-        if self.desired == "stopped" and self.stops_after is not None and self.reads > self.stops_after:
+        if (
+            self.desired == "stopped"
+            and self.stops_after is not None
+            and self.reads > self.stops_after
+        ):
             self.actual = "stopped"
         return {"desired_state": self.desired, "actual_state": self.actual}
 
@@ -41,7 +47,9 @@ def _run(monkeypatch: Any, p: _Pipeline, **kw: Any) -> dict[str, Any]:
     monkeypatch.setattr(manager.repo, "pipeline_state", p.state)
     monkeypatch.setattr(manager.repo, "request_pipeline", p.request)
     clock = iter(range(0, 10_000, 3))
-    return manager.start_marketing_agent(_Db(), "priya@example.com", sleep=lambda s: None, clock=lambda: float(next(clock)), **kw)  # type: ignore[arg-type]
+    return manager.start_marketing_agent(
+        _Db(), "priya@example.com", sleep=lambda s: None, clock=lambda: float(next(clock)), **kw
+    )  # type: ignore[arg-type]
 
 
 def test_a_stopped_pipeline_is_simply_started(monkeypatch: Any) -> None:
@@ -50,7 +58,9 @@ def test_a_stopped_pipeline_is_simply_started(monkeypatch: Any) -> None:
     assert p.asked == ["running"]
 
 
-def test_a_running_pipeline_is_stopped_then_started_so_it_takes_the_new_campaign(monkeypatch: Any) -> None:
+def test_a_running_pipeline_is_stopped_then_started_so_it_takes_the_new_campaign(
+    monkeypatch: Any,
+) -> None:
     p = _Pipeline("running", "running", stops_after=2)
     assert _run(monkeypatch, p) == {"asked": True, "restarted": True}
     assert p.asked == ["stopped", "running"]  # in this order, with the stop seen in between
@@ -70,4 +80,7 @@ def test_without_the_grant_nothing_is_asked_and_it_says_why(monkeypatch: Any) ->
 
 def test_an_unreadable_pipeline_table_is_reported(monkeypatch: Any) -> None:
     monkeypatch.setattr(manager.repo, "pipeline_state", lambda conn: None)
-    assert manager.start_marketing_agent(_Db(), "x") == {"asked": False, "reason": "pipeline_not_readable"}  # type: ignore[arg-type]
+    assert manager.start_marketing_agent(_Db(), "x") == {
+        "asked": False,
+        "reason": "pipeline_not_readable",
+    }  # type: ignore[arg-type]

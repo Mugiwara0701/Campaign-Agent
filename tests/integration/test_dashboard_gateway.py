@@ -28,7 +28,9 @@ def gateway(pg_url: str, db: Database) -> Gateway:
     return Gateway(pg_url, connect=AsDashboard)
 
 
-def test_an_interpret_request_is_recorded_and_the_campaign_agent_can_take_it(gateway: Gateway, db: Database) -> None:
+def test_an_interpret_request_is_recorded_and_the_campaign_agent_can_take_it(
+    gateway: Gateway, db: Database
+) -> None:
     cid = new_campaign(db, detail="Find automotive companies that need Yocto help")
     sent = gateway.send_request(cid, "interpret", {}, None, "priya@example.com", "k1")
     assert sent["status"] == "pending" and sent["duplicate"] is False
@@ -63,5 +65,7 @@ def test_a_campaign_nobody_started_reads_as_new(gateway: Gateway, db: Database) 
 def test_pause_and_resume_and_the_status(gateway: Gateway, db: Database) -> None:
     assert gateway.set_ca_state("paused", "priya@example.com")["desired_state"] == "paused"
     status = gateway.ca_status()
-    assert status["control"]["desired_state"] == "paused" and status["online"] is False  # no heartbeat in a test database
+    assert (
+        status["control"]["desired_state"] == "paused" and status["online"] is False
+    )  # no heartbeat in a test database
     assert gateway.set_ca_state("running", "priya@example.com")["desired_state"] == "running"

@@ -171,11 +171,15 @@ def test_effective_hash_is_stable_and_changes_with_content() -> None:
 
 
 def test_several_countries_become_one_search_hint_that_fits_the_contract() -> None:
-    data = compile_overlay(ir_with(("audience.include_countries", ["Germany", "Austria", "Switzerland"]))).data
+    data = compile_overlay(
+        ir_with(("audience.include_countries", ["Germany", "Austria", "Switzerland"]))
+    ).data
     assert data["search"]["query_suffix"] == "Germany Austria Switzerland"
     CampaignOverlay.model_validate(data)
     many = [f"Country{i}" for i in range(30)]
-    suffix = compile_overlay(ir_with(("audience.include_countries", many))).data["search"]["query_suffix"]
+    suffix = compile_overlay(ir_with(("audience.include_countries", many))).data["search"][
+        "query_suffix"
+    ]
     assert len(suffix) <= 80 and suffix.startswith("Country0 Country1")
 
 
@@ -185,7 +189,9 @@ def test_a_search_suffix_the_user_set_is_never_replaced_by_the_countries() -> No
     )
     assert result.data["search"]["query_suffix"] == "EV charging"
     note = next(n for n in result.not_applied if n.proposal == "targeting.include_countries")
-    assert note.kind == "unsupported_field"  # not applied at all: it must not claim a hint that was not written
+    assert (
+        note.kind == "unsupported_field"
+    )  # not applied at all: it must not claim a hint that was not written
 
 
 def test_no_countries_means_no_hint() -> None:

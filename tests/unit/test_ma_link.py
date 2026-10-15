@@ -60,9 +60,7 @@ class Clock:
 
 def client(backend: FakeBackend, clock: Clock | None = None) -> TestClient:
     clock = clock or Clock()
-    app = create_app(
-        backend, token=TOKEN, token_previous=PREVIOUS, sleep=clock.sleep, clock=clock
-    )
+    app = create_app(backend, token=TOKEN, token_previous=PREVIOUS, sleep=clock.sleep, clock=clock)
     return TestClient(app)
 
 
@@ -97,7 +95,13 @@ def test_the_current_and_the_previous_token_are_accepted() -> None:
 
 def test_every_route_needs_the_token_even_an_unknown_one() -> None:
     c = client(FakeBackend([None]))
-    for path in ("/ma/v1/health", "/ma/v1/campaign/active", "/ma/v1/nothing", "/docs", "/openapi.json"):
+    for path in (
+        "/ma/v1/health",
+        "/ma/v1/campaign/active",
+        "/ma/v1/nothing",
+        "/docs",
+        "/openapi.json",
+    ):
         assert c.get(path).status_code == 401
     assert c.post("/ma/v1/events", json={"events": [event()]}).status_code == 401
 

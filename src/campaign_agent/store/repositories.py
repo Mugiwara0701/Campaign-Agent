@@ -368,7 +368,9 @@ def beat(
 
 class Control(NamedTuple):
     desired: str  # "running" or "paused": what the dashboard asked
-    ma_resume: bool | None  # the Marketing Agent was running when the pause came; None = migration 0020 not applied
+    ma_resume: (
+        bool | None
+    )  # the Marketing Agent was running when the pause came; None = migration 0020 not applied
 
 
 def read_control(conn: Conn) -> Control:
@@ -377,12 +379,16 @@ def read_control(conn: Conn) -> Control:
     migrations behaves as before. Inside a savepoint, so the caller's transaction survives."""
     try:
         with conn.transaction():
-            row = conn.execute("select desired_state, ma_resume from public.ca_control where id = 1").fetchone()
+            row = conn.execute(
+                "select desired_state, ma_resume from public.ca_control where id = 1"
+            ).fetchone()
         ma_resume: bool | None = bool(row["ma_resume"]) if row else None
     except psycopg.errors.UndefinedColumn:
         try:
             with conn.transaction():
-                row = conn.execute("select desired_state from public.ca_control where id = 1").fetchone()
+                row = conn.execute(
+                    "select desired_state from public.ca_control where id = 1"
+                ).fetchone()
         except (psycopg.errors.UndefinedTable, psycopg.errors.InsufficientPrivilege):
             return Control("running", None)
         ma_resume = None
@@ -397,7 +403,9 @@ def read_desired_state(conn: Conn) -> str:
 
 def set_ma_resume(conn: Conn, value: bool) -> None:
     with conn.transaction():
-        conn.execute("update public.ca_control set ma_resume = %s, updated_at = now() where id = 1", (value,))
+        conn.execute(
+            "update public.ca_control set ma_resume = %s, updated_at = now() where id = 1", (value,)
+        )
 
 
 def report_actual_state(conn: Conn, state: str) -> None:
@@ -422,7 +430,8 @@ def auto_interpret_new_campaigns(conn: Conn, grace_s: int, max_age_h: int) -> li
     try:
         with conn.transaction():
             rows = conn.execute(
-                "select started_campaign_id from public.ca_auto_interpret(%s, %s)", (grace_s, max_age_h)
+                "select started_campaign_id from public.ca_auto_interpret(%s, %s)",
+                (grace_s, max_age_h),
             ).fetchall()
     except (psycopg.errors.UndefinedFunction, psycopg.errors.InsufficientPrivilege):
         return None

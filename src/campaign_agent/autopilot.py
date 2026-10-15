@@ -54,12 +54,16 @@ def run_autopilot(
     try:
         r = http.post("/api/autopilot", json=body, headers=_headers(port))
     except httpx.HTTPError:
-        out(f"The window is not running on this machine (nothing answers on {HOST}:{port}). Start it: python -m campaign_agent ui")
+        out(
+            f"The window is not running on this machine (nothing answers on {HOST}:{port}). Start it: python -m campaign_agent ui"
+        )
         return 2
     if r.status_code != 200:
         out(f"Could not start: {r.json().get('detail', r.status_code)}")
         return 2
-    out(f"Plan {r.json()['id']}: campaign={body['message'][:70]!r} edit={body['edit']!r} approve={approve} start_ma={start_ma}")
+    out(
+        f"Plan {r.json()['id']}: campaign={body['message'][:70]!r} edit={body['edit']!r} approve={approve} start_ma={start_ma}"
+    )
     shown = 0
     started = clock()
     while clock() - started < timeout_s + 60:
@@ -77,7 +81,9 @@ def run_autopilot(
         if status["state"] == "failed":
             return 1
         if not status["log"] and clock() - started > WINDOW_WAIT_S:
-            out("No window picked the plan up. Is the window open? Start it: python -m campaign_agent ui")
+            out(
+                "No window picked the plan up. Is the window open? Start it: python -m campaign_agent ui"
+            )
             return 2
     out("Gave up waiting.")
     return 2

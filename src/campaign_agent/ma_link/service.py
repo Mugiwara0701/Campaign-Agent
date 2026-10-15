@@ -84,7 +84,9 @@ class LinkService:
         self._lock = threading.Lock()
         self._clock = clock
         self._last_prune = float("-inf")
-        self._unbuildable: set[tuple[str, int, str]] = set()  # versions whose complete file failed: say so once
+        self._unbuildable: set[tuple[str, int, str]] = (
+            set()
+        )  # versions whose complete file failed: say so once
 
     def live_campaign(self) -> LiveCampaign | None:
         with self._lock, self._db.transaction() as conn:
@@ -109,7 +111,12 @@ class LinkService:
             self._unbuildable.add(key)
             log.warning("the complete file could not be built", exc_info=True)
             return campaign
-        return replace(campaign, leadgen_yaml=built.text, leadgen_sha256=built.sha256, base_sha256=built.base_sha256)
+        return replace(
+            campaign,
+            leadgen_yaml=built.text,
+            leadgen_sha256=built.sha256,
+            base_sha256=built.base_sha256,
+        )
 
     def store_events(self, events: list[EventIn]) -> list[str]:
         with self._lock, self._db.transaction() as conn:

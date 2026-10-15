@@ -30,11 +30,22 @@ class _Db:
 
 def _claim(monkeypatch: pytest.MonkeyPatch, released: Any) -> list[Any]:
     """One claimed request whose handling crashes; `released` is what releasing it does."""
-    row = {"id": "r1", "campaign_id": "c1", "request_type": "interpret", "payload": {}, "base_revision": None, "requested_by": "ceo"}
+    row = {
+        "id": "r1",
+        "campaign_id": "c1",
+        "request_type": "interpret",
+        "payload": {},
+        "base_revision": None,
+        "requested_by": "ceo",
+    }
     calls: list[Any] = [row]
     monkeypatch.setattr(manager.repo, "requeue_expired", lambda conn, n: None)
-    monkeypatch.setattr(manager.repo, "claim_request", lambda conn, w, lease: calls.pop() if calls else None)
-    monkeypatch.setattr(manager.repo, "get_campaign", lambda conn, cid: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(
+        manager.repo, "claim_request", lambda conn, w, lease: calls.pop() if calls else None
+    )
+    monkeypatch.setattr(
+        manager.repo, "get_campaign", lambda conn, cid: (_ for _ in ()).throw(RuntimeError("boom"))
+    )
     monkeypatch.setattr(manager.repo, "release_request", released)
     return calls
 
@@ -43,7 +54,9 @@ def _cfg() -> Any:
     return manager.ManagerConfig(worker_id="w", lease_s=60, max_attempts=3, rate_limit_per_minute=0)
 
 
-def test_a_request_whose_campaign_was_deleted_is_dropped_and_the_worker_goes_on(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_request_whose_campaign_was_deleted_is_dropped_and_the_worker_goes_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _claim(monkeypatch, lambda conn, rid, detail, n: "gone")
     assert manager.process_next(_Db(), object(), _cfg()) is True  # type: ignore[arg-type]  # no exception: the loop continues
 

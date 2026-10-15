@@ -90,7 +90,9 @@ def test_what_cannot_be_applied_is_listed_not_dropped() -> None:
     assert any(n.kind == "channel" for n in out.view.not_applied)
     yaml_text = out.candidate.yaml.split("config_version")[1]  # type: ignore[union-attr]
     assert "query_suffix: US" in yaml_text  # only as a search hint...
-    assert "include_countries" not in yaml_text  # ...never as a country list the Marketing Agent would enforce
+    assert (
+        "include_countries" not in yaml_text
+    )  # ...never as a country list the Marketing Agent would enforce
 
 
 # --- failures of the first message ----------------------------------------------------------------------------------

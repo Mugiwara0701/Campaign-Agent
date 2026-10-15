@@ -12,15 +12,23 @@ _DIM, _OFF = "\033[90m", "\033[0m"
 
 # (seconds to wait, who, text)
 STORY: tuple[tuple[float, str, str], ...] = (
-    (0.6, "dashboard", 'request from priya@example: "Find SaaS CFOs in Germany, 50-200 staff, skip agencies"'),
+    (
+        0.6,
+        "dashboard",
+        'request from priya@example: "Find SaaS CFOs in Germany, 50-200 staff, skip agencies"',
+    ),
     (0.8, "guard", "input checked: no secrets, no instructions aimed at the agent"),
     (1.0, "model", "reading the request (qwen3.5:9b, schema mode)"),
     (1.4, "extract", "industry=SaaS, role=CFO, country=DE, size=50-200, exclude=agencies"),
-    (0.8, "gap", "1 thing is unclear: does \"Germany\" include Austria and Switzerland?"),
+    (0.8, "gap", '1 thing is unclear: does "Germany" include Austria and Switzerland?'),
     (0.8, "question", "asked the dashboard: DACH or Germany only?"),
     (1.8, "dashboard", "answer: Germany only"),
     (0.8, "compile", "built the overlay: search.queries, filters.country, exclude_industries"),
-    (0.9, "validate", "levels 1-5 passed: schema, keys, ranges, secrets, merge with the base config"),
+    (
+        0.9,
+        "validate",
+        "levels 1-5 passed: schema, keys, ranges, secrets, merge with the base config",
+    ),
     (0.9, "validate", "level 6 skipped: no Marketing Agent checkout on this machine"),
     (1.2, "dashboard", "approved by priya@example (version 3)"),
     (0.8, "publish", "version 3 is live, sha256 9f2c41ab7d03e1c5"),

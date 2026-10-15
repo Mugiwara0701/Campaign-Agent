@@ -54,9 +54,13 @@ def validate_bind(setting: str) -> str | None:
     try:
         ip = ipaddress.ip_address(wanted)
     except ValueError as exc:
-        raise ValueError(f"MA_LINK_BIND must be 'tailscale' or one IP address, not {wanted!r}") from exc
+        raise ValueError(
+            f"MA_LINK_BIND must be 'tailscale' or one IP address, not {wanted!r}"
+        ) from exc
     if ip.is_unspecified:
-        raise ValueError("MA_LINK_BIND must not be 0.0.0.0 or ::, the link must not listen on every interface")
+        raise ValueError(
+            "MA_LINK_BIND must not be 0.0.0.0 or ::, the link must not listen on every interface"
+        )
     return str(ip)
 
 
@@ -93,7 +97,11 @@ class LinkServer:
                     log.warning("link: no Tailscale address yet, retrying", extra={"in_s": RETRY_S})
                 else:
                     config = uvicorn.Config(
-                        self._app, host=address, port=self._port, log_level="warning", access_log=False
+                        self._app,
+                        host=address,
+                        port=self._port,
+                        log_level="warning",
+                        access_log=False,
                     )
                     self._server = uvicorn.Server(config)
                     log.info("link listening", extra={"address": address, "port": self._port})

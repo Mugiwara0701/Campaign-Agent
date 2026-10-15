@@ -17,7 +17,12 @@ from campaign_agent.settings import Settings
 from campaign_agent.store.db import Conn, Database
 
 OK, WARN, FAIL, OFF = "ok", "warn", "fail", "off"
-_MARK = {OK: "\033[32m●\033[0m", WARN: "\033[33m●\033[0m", FAIL: "\033[31m●\033[0m", OFF: "\033[90m○\033[0m"}
+_MARK = {
+    OK: "\033[32m●\033[0m",
+    WARN: "\033[33m●\033[0m",
+    FAIL: "\033[31m●\033[0m",
+    OFF: "\033[90m○\033[0m",
+}
 _CLEAR = "\033[H\033[2J"
 HEARTBEAT_FRESH_S = 30
 
@@ -72,12 +77,18 @@ def _worker(conn: Conn, model: str) -> Line:
         "select agent_status, model_name, extract(epoch from now() - last_seen) as age from public.ca_heartbeat",
     )
     if not rows:
-        return Line("Worker", FAIL, "no heartbeat yet: `start` has not run, or the database was reset")
+        return Line(
+            "Worker", FAIL, "no heartbeat yet: `start` has not run, or the database was reset"
+        )
     row = rows[0]
     age = float(row["age"])  # type: ignore[arg-type]
     state = OK if age <= HEARTBEAT_FRESH_S else FAIL
     if state == OK and row["agent_status"] == "paused":
-        return Line("Worker", WARN, f"paused from the dashboard: takes no new request, last beat {_ago(age)}")
+        return Line(
+            "Worker",
+            WARN,
+            f"paused from the dashboard: takes no new request, last beat {_ago(age)}",
+        )
     note = f"{row['agent_status']}, model {row['model_name'] or model}, last beat {_ago(age)}"
     return Line("Worker", state, note if state == OK else f"stopped? {note}")
 
@@ -87,14 +98,24 @@ def _model(settings: Settings) -> Line:
     try:
         response = httpx.get(settings.llm_base_url.rstrip("/") + path, timeout=3.0)
     except httpx.HTTPError as exc:
-        return Line("Model server", FAIL, f"{settings.llm_base_url} not reachable ({type(exc).__name__})")
+        return Line(
+            "Model server", FAIL, f"{settings.llm_base_url} not reachable ({type(exc).__name__})"
+        )
     if response.status_code >= 500:
-        return Line("Model server", WARN, f"{settings.llm_base_url} answered {response.status_code}")
-    return Line("Model server", OK, f"{settings.llm_backend} at {settings.llm_base_url}, model {settings.llm_model}")
+        return Line(
+            "Model server", WARN, f"{settings.llm_base_url} answered {response.status_code}"
+        )
+    return Line(
+        "Model server",
+        OK,
+        f"{settings.llm_backend} at {settings.llm_base_url}, model {settings.llm_model}",
+    )
 
 
 def _queue(conn: Conn) -> tuple[Line, tuple[str, ...]]:
-    counts = _query(conn, "select status, count(*) as n from public.campaign_request group by status")
+    counts = _query(
+        conn, "select status, count(*) as n from public.campaign_request group by status"
+    )
     if counts is None:
         return Line("Requests", FAIL, "table not readable: apply the migrations"), ()
     by = {str(r["status"]): int(r["n"]) for r in counts}  # type: ignore[call-overload]
@@ -110,7 +131,11 @@ def _queue(conn: Conn) -> tuple[Line, tuple[str, ...]]:
         + (f"  [{r['error_code']}]" if r["error_code"] else "")
         for r in recent or []
     )
-    return Line("Requests", state, f"{pending} waiting, {running} running, {failed} failed, {by.get('done', 0)} done"), rows
+    return Line(
+        "Requests",
+        state,
+        f"{pending} waiting, {running} running, {failed} failed, {by.get('done', 0)} done",
+    ), rows
 
 
 def _campaign(conn: Conn) -> Line:
@@ -125,7 +150,11 @@ def _campaign(conn: Conn) -> Line:
     if not rows:
         return Line("Live campaign", OFF, "none is live; the Marketing Agent runs its base config")
     r = rows[0]
-    return Line("Live campaign", OK, f"version {r['version_no']}, approved by {r['approved_by']} {_ago(float(r['age'])) }")  # type: ignore[arg-type]
+    return Line(
+        "Live campaign",
+        OK,
+        f"version {r['version_no']}, approved by {r['approved_by']} {_ago(float(r['age']))}",
+    )  # type: ignore[arg-type]
 
 
 def _link(settings: Settings) -> Line:
@@ -136,18 +165,30 @@ def _link(settings: Settings) -> Line:
         return Line("Link to MA", OFF, "off (MA_LINK_ENABLED is not set)")
     token = settings.ma_link_token.get_secret_value() if settings.ma_link_token else ""
     if len(token) < MIN_TOKEN_CHARS:
-        return Line("Link to MA", FAIL, f"MA_LINK_TOKEN is missing or shorter than {MIN_TOKEN_CHARS} characters")
+        return Line(
+            "Link to MA",
+            FAIL,
+            f"MA_LINK_TOKEN is missing or shorter than {MIN_TOKEN_CHARS} characters",
+        )
     try:
         address = resolve_bind(settings.ma_link_bind)
     except ValueError as exc:
         return Line("Link to MA", FAIL, str(exc))
     if address is None:
-        return Line("Link to MA", WARN, "Tailscale has no address yet: is `tailscaled` up? (it retries every 15 s)")
+        return Line(
+            "Link to MA",
+            WARN,
+            "Tailscale has no address yet: is `tailscaled` up? (it retries every 15 s)",
+        )
     try:
         with socket.create_connection((address, settings.ma_link_port), timeout=2):
             pass
     except OSError:
-        return Line("Link to MA", FAIL, f"nothing is listening on {address}:{settings.ma_link_port}: is `start` running?")
+        return Line(
+            "Link to MA",
+            FAIL,
+            f"nothing is listening on {address}:{settings.ma_link_port}: is `start` running?",
+        )
     return Line("Link to MA", OK, f"listening on {address}:{settings.ma_link_port}")
 
 
@@ -178,7 +219,10 @@ def _marketing_agent(conn: Conn) -> tuple[Line, tuple[str, ...]]:
         if running and running[0]["code"] != "MA_PASS_FINISHED"
         else None
     )
-    counted = _query(conn, "select count(*) as n from public.ma_event where kind = 'blocker' and resolved_at is null")
+    counted = _query(
+        conn,
+        "select count(*) as n from public.ma_event where kind = 'blocker' and resolved_at is null",
+    )
     open_blockers = int(counted[0]["n"]) if counted else 0  # type: ignore[call-overload]
     if not status:
         return Line("Marketing Agent", OFF, "has not reported yet"), lines
@@ -218,7 +262,9 @@ def render(snap: Snapshot, *, banner: str, stamp: str) -> str:
     out = [f"\033[1mCampaign Agent\033[0m  {banner}  {stamp}", ""]
     out += [f" {_MARK[line.state]} {line.name:<{width}}  {line.detail}" for line in snap.lines]
     out += ["", "\033[1mRecent requests\033[0m"] + [f"   {r}" for r in snap.requests or ("none",)]
-    out += ["", "\033[1mMarketing Agent events\033[0m"] + [f"   {e}" for e in snap.events or ("none",)]
+    out += ["", "\033[1mMarketing Agent events\033[0m"] + [
+        f"   {e}" for e in snap.events or ("none",)
+    ]
     return "\n".join(out)
 
 

@@ -44,7 +44,9 @@ def backoff_for(detail: str, failures: int) -> float:
 AUTO_START_CHECK_S = 10.0  # how often an idle worker looks for a new campaign nobody has started
 PAUSE_ENFORCE_S = 30.0  # while paused, how often to make sure the Marketing Agent is still stopped
 BEAT_JOIN_S = 5.0  # how long a stop waits for the heartbeat thread
-HEARTBEAT_S = 15.0  # a request can take minutes (a model on a CPU): the heartbeat must not wait for it
+HEARTBEAT_S = (
+    15.0  # a request can take minutes (a model on a CPU): the heartbeat must not wait for it
+)
 
 
 def agent_version() -> str:
@@ -121,14 +123,22 @@ class Worker:
                 if not ma_resume:
                     repo.set_ma_resume(conn, True)  # it was running: start it again on resume
                 if repo.request_pipeline(conn, "stopped", "campaign agent paused"):
-                    log.info("the Marketing Agent was asked to stop because the Campaign Agent is paused")
+                    log.info(
+                        "the Marketing Agent was asked to stop because the Campaign Agent is paused"
+                    )
                 else:
-                    log.warning("the Campaign Agent is paused but may not stop the Marketing Agent (migration 0018?)")
+                    log.warning(
+                        "the Campaign Agent is paused but may not stop the Marketing Agent (migration 0018?)"
+                    )
         elif ma_resume:
             if repo.request_pipeline(conn, "running", "campaign agent resumed"):
-                log.info("the Marketing Agent was asked to run again because the Campaign Agent resumed")
+                log.info(
+                    "the Marketing Agent was asked to run again because the Campaign Agent resumed"
+                )
             else:
-                log.warning("the Campaign Agent resumed but may not start the Marketing Agent (migration 0018?)")
+                log.warning(
+                    "the Campaign Agent resumed but may not start the Marketing Agent (migration 0018?)"
+                )
             repo.set_ma_resume(conn, False)  # asked once; never retried in a loop
 
     def _auto_start_new_campaigns(self) -> bool:
@@ -140,11 +150,15 @@ class Worker:
             return False
         self._last_auto_start = self._clock()
         with self._db.transaction() as conn:
-            started = repo.auto_interpret_new_campaigns(conn, cfg.auto_interpret_grace_s, cfg.auto_interpret_max_age_h)
+            started = repo.auto_interpret_new_campaigns(
+                conn, cfg.auto_interpret_grace_s, cfg.auto_interpret_max_age_h
+            )
         if started is None:
             if not self._auto_start_warned:
                 self._auto_start_warned = True
-                log.warning("cannot start on new campaigns by itself: migration 0021 is not applied")
+                log.warning(
+                    "cannot start on new campaigns by itself: migration 0021 is not applied"
+                )
             return False
         for campaign_id in started:
             log.info("started on a new campaign by itself", extra={"campaign_id": campaign_id})
@@ -179,7 +193,9 @@ class Worker:
                 with db.transaction() as conn:
                     repo.beat(
                         conn,
-                        status="paused" if self._paused and not self._busy else ("busy" if self._busy else "idle"),
+                        status="paused"
+                        if self._paused and not self._busy
+                        else ("busy" if self._busy else "idle"),
                         agent_version=agent_version(),
                         model_name=self._model,
                         request_id=None,
@@ -197,14 +213,18 @@ class Worker:
     def run_forever(self) -> None:
         log.info("worker started", extra={"worker_id": self._cfg.worker_id})
         beat_db = self._db.clone()
-        beater = threading.Thread(target=self._heartbeat_loop, args=(beat_db,), daemon=True, name="heartbeat")
+        beater = threading.Thread(
+            target=self._heartbeat_loop, args=(beat_db,), daemon=True, name="heartbeat"
+        )
         beater.start()
         try:
             self._loop()
         finally:
             self._beat_stop.set()
             beater.join(timeout=BEAT_JOIN_S)
-            if not beater.is_alive():  # a thread stuck in a network call holds its connection: closing it would wait too
+            if (
+                not beater.is_alive()
+            ):  # a thread stuck in a network call holds its connection: closing it would wait too
                 beat_db.close()
         log.info("worker stopped", extra={"worker_id": self._cfg.worker_id})
 

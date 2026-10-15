@@ -53,7 +53,12 @@ class Gateway:
         key = idempotency_key or uuid.uuid4().hex
 
         def work(conn: Any) -> dict[str, Any]:
-            if conn.execute("select 1 from public.campaign where id = %s", (campaign_id,)).fetchone() is None:
+            if (
+                conn.execute(
+                    "select 1 from public.campaign where id = %s", (campaign_id,)
+                ).fetchone()
+                is None
+            ):
                 raise NotFound
             row = conn.execute(
                 "insert into public.campaign_request "
@@ -76,7 +81,8 @@ class Gateway:
     def set_ca_state(self, state: str, requested_by: str) -> dict[str, Any]:
         def work(conn: Any) -> dict[str, Any]:
             row = conn.execute(
-                "select desired_state, actual_state from public.ca_request_state(%s, %s)", (state, requested_by)
+                "select desired_state, actual_state from public.ca_request_state(%s, %s)",
+                (state, requested_by),
             ).fetchone()
             return dict(row) if row else {}
 
@@ -86,7 +92,12 @@ class Gateway:
 
     def campaign(self, campaign_id: str) -> dict[str, Any]:
         def work(conn: Any) -> dict[str, Any]:
-            if conn.execute("select 1 from public.campaign where id = %s", (campaign_id,)).fetchone() is None:
+            if (
+                conn.execute(
+                    "select 1 from public.campaign where id = %s", (campaign_id,)
+                ).fetchone()
+                is None
+            ):
                 raise NotFound
             state = conn.execute(
                 "select current_state, revision, review_view, updated_at from public.campaign_state where campaign_id = %s",
