@@ -94,11 +94,27 @@ def test_the_approver_is_whoever_the_dashboard_says_signed_in() -> None:
     assert out.action is not None and out.action.approver == "priya@example.com"
 
 
-def test_starting_the_pipeline_from_an_approval_is_not_available() -> None:
-    out = approve(reviewing(), start_pipeline=True)
-    assert out.error is not None and out.error.code is ErrorCode.NOT_AVAILABLE
-    assert out.action is None
-    assert out.conv.state is State.AWAITING_REVIEW
+def test_an_approval_can_ask_for_the_pipeline_to_start_after_the_publish() -> None:
+    ws = reviewing()
+    out = approve(ws, start_pipeline=True)
+    assert out.error is None and out.conv.state is State.PUBLISHED
+    assert (
+        out.action is not None
+        and out.action.kind == "publish"
+        and out.action.start_pipeline is True
+    )
+
+
+def test_without_the_flag_an_approval_starts_nothing() -> None:
+    out = approve(reviewing())
+    assert out.action is not None and out.action.start_pipeline is False
+
+
+@pytest.mark.parametrize("flag", ["yes", 1, "true", None])
+def test_start_pipeline_must_be_true_or_false(flag: object) -> None:
+    out = approve(reviewing(), start_pipeline=flag)
+    assert out.error is not None and out.error.code is ErrorCode.INVALID_REQUEST
+    assert out.action is None and out.conv.state is State.AWAITING_REVIEW
 
 
 @pytest.mark.parametrize(

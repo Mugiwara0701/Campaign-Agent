@@ -33,7 +33,8 @@ Only the dashboard's Next.js routes (service key) write it. RLS is on with no po
 | `campaign_request` | Inbox. One row per dashboard action: `interpret`, `answer`, `edit`, `suggestion`, `approve`, `discard`, `rollback`. Holds status, result and error code. Unique on `(campaign_id, idempotency_key)`. | Dashboard inserts; CA updates status and result |
 | `campaign_state` | One row per campaign: current state, revision, working IR, the review view shown in the dashboard, candidate version and **active version** pointer. | CA |
 | `campaign_version` | Frozen versions: overlay YAML, sha256, reports, approver. Content is immutable; approval fields can be set once (enforced by a trigger). | CA |
-| `ca_heartbeat` | Single row, shows the CA machine is alive. | CA |
+| `ca_heartbeat` | Single row, shows the CA machine is alive (`idle`, `busy`, `paused`). | CA |
+| `ca_control` | Single row: the dashboard asks to pause or resume the CA (through `ca_request_state()`), the CA reports what it does. See `docs/dashboard-pause-resume.md`. | Dashboard (ask), CA (report) |
 
 ```text
 public.campaign (dashboard)

@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     max_attempts: int = Field(default=3, ge=1, le=10)
     # Requests per requester per minute (0 = no limit). See docs/security-review.md.
     rate_limit_per_minute: int = Field(default=30, ge=0, le=10_000)
+    # A new campaign with no request is started by the service itself (it sends the `interpret` request). Only a campaign
+    # with text, older than the grace period (the dashboard's own request wins), younger than the max age.
+    auto_interpret: bool = True
+    auto_interpret_grace_s: int = Field(default=20, ge=0, le=3600)
+    auto_interpret_max_age_h: int = Field(default=168, ge=1, le=24 * 365)
     worker_id: str = ""
     # Level 6: a pinned checkout of the Marketing Agent on this machine, run with no network (see downstream.py).
     ma_checkout: Path | None = None
@@ -48,6 +53,22 @@ class Settings(BaseSettings):
     research_allow_domains: str = ""
     research_deny_domains: str = ""
     research_timeout_s: float = Field(default=10.0, gt=0, le=60)
+    # The dashboard gateway (docs/dashboard-api.md), run by `python -m campaign_agent api`, normally on Render. It logs in
+    # to the database as the limited `campaign_dashboard` role (never the owner) and checks one shared token (32+ characters).
+    api_database_url: SecretStr | None = None
+    api_token: SecretStr | None = None
+    # The direct link to the Marketing Agent over Tailscale (docs/ca-ma-link.md). Off unless switched on.
+    ma_link_enabled: bool = False
+    # "tailscale" = this machine's Tailscale address (found when the listener starts); or one literal address.
+    # 0.0.0.0 is refused: the listener must never be reachable on the LAN.
+    ma_link_bind: str = "tailscale"
+    ma_link_port: int = Field(default=8787, ge=1024, le=65535)
+    # At least 32 characters. The previous one is accepted too, for one rollover.
+    ma_link_token: SecretStr | None = None
+    ma_link_token_previous: SecretStr | None = None
+    # true: the Marketing Agent is given the live campaign only while the dashboard's own settings allow it (the campaign
+    # is switched on and today is between its start and end dates). false (default): approval alone makes it live.
+    ma_link_respect_schedule: bool = False
 
 
 def load_settings() -> Settings:

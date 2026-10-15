@@ -56,8 +56,15 @@ Each candidate also stores a snapshot of the campaign as it was (`ir_snapshot`).
 ## Decisions and open points
 
 - **One live campaign at a time** for the first release. Several at once needs MA support.
-- **`start_pipeline` on an approval is refused** (`not_available`): whether approval should start the pipeline is still an
-  open decision (U2); the recommendation is publish only.
-- **Not decided here:** how the dashboard's `is_active` and start/end dates combine with a live version. That is the MA's
-  pickup rule (M8); today the pointer alone says what is live.
-- The migration is not applied to the shared database; it was tested on a throwaway PostgreSQL 16, in order and twice.
+- **`start_pipeline` on an approval** (`true` or `false`, default `false`): when `true`, the Campaign Agent asks for the
+  Marketing Agent's pipeline to run **after the publish is committed**, with the same function the Start button calls
+  (`request_pipeline`, allowed for its role by migration 0018). A failure there never undoes the publish: the answer
+  carries `result.pipeline` (`asked`, `restarted`, and `reason` when it could not). A pipeline that is **already running**
+  only takes a new campaign at its next pass, so it is stopped and started again (the stop must be seen first; it waits up
+  to 90 seconds, then asks for "running" again anyway, so it is never left stopped). Approving again with the flag, for a
+  campaign that is already live, starts it again, in case the first attempt failed. Any other value is `invalid_request`.
+- **The dashboard's `is_active` and start/end dates.** By default they are ignored: approval alone makes a version live.
+  With `MA_LINK_RESPECT_SCHEDULE=true` the Marketing Agent is only given the live campaign while the campaign is switched on
+  and today lies between its start and end dates; outside that, the link says "no campaign is live" and the Marketing Agent
+  runs its own base config (it does not stop). Off by default because campaigns made by the test tools are not "active".
+- The migrations are applied to the shared database through 0019 (0020, the MA pausing with the CA, is drafted; `migrations/optional/dashboard_auth.sql` is optional, see `docs/handover.md`).

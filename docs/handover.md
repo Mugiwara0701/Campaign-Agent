@@ -1,5 +1,9 @@
 # Handover: connecting the dashboard to the Campaign Agent
 
+> **Overview of everything: [backend-and-dashboard-guide.md](backend-and-dashboard-guide.md).**
+> **Then [dashboard-integration.md](dashboard-integration.md)**: the final guide (what to build, how, and what not to do).
+> The dashboard no longer controls the Marketing Agent's pipeline: the Campaign Agent runs it. This page is the detail.
+
 For the dashboard developer. The Campaign Agent (CA) has **no HTTP API**. You talk to it through three tables in the
 shared Supabase database: you insert **requests**, and you read the **state** and the **result**. This page is the short
 version; the full contract is [store-and-inbox.md](store-and-inbox.md) (requests, errors, roles) and
@@ -7,8 +11,8 @@ version; the full contract is [store-and-inbox.md](store-and-inbox.md) (requests
 
 ## What you need before you start
 
-1. The migrations `0013` to `0016` in `migrations/` applied to the shared database by its owner, in order
-   (`bash deploy/remote.sh migrate --plan` shows what is missing). **They are not applied yet.**
+1. The migrations in `migrations/` applied to the shared database by its owner, in order (`bash deploy/remote.sh migrate
+   --plan` shows what is missing). `0013` to `0019` are applied; `0020` (the Marketing Agent pauses with the Campaign Agent) is next. `migrations/optional/dashboard_auth.sql` is optional and is not applied by the runner (see "Who is signed in" below).
 2. A database login for the dashboard server. Either keep using the service key, or use the limited role
    `campaign_dashboard` (created by `0014`): it can insert requests, and read request status, `review_view`, versions,
    the heartbeat and the Marketing Agent's reported status; nothing else.
@@ -101,13 +105,37 @@ Every failed request has `error_code` and a short `error_detail` meant for the u
 a minute; wait and retry) and **`publish_blocked`** also when the Marketing Agent reported that it cannot load our contract
 version (`result.ma_supported` lists what it can).
 
+## Starting the Marketing Agent from an approval
+
+Add `"start_pipeline": true` to the `approve` payload and the Campaign Agent also asks for the Marketing Agent's pipeline to
+run, once the publish is committed. Without it (or `false`) nothing is started, as before. Read `result.pipeline` on the
+approve request: `asked` (it was asked), `restarted` (it was already running, so it was stopped and started again to take
+the new file), and `reason` when it could not (`not_allowed`, `pipeline_not_readable`). The campaign is live in every case.
+
+## A new campaign starts by itself
+
+The Campaign Agent also starts on a campaign that was saved without an `interpret` request (migration 0021; the service
+checks every 10 seconds; the campaign must have text, be older than 20 seconds and younger than 7 days, and have no
+request and no state). Sending the request yourself right after saving is still the fast, normal way.
+
+## Pause and resume the Campaign Agent
+
+See [dashboard-pause-resume.md](dashboard-pause-resume.md): one function, one row, no server.
+
+## Who is signed in (only if the browser writes to the database directly)
+
+`requested_by` is the approval record. A dashboard server fills it from its own login, which is safe. If instead the page
+talks to the database directly with Supabase Auth, use `migrations/optional/dashboard_auth.sql` (optional; apply it by hand, the migration runner skips that folder): the
+database then accepts a request only when `requested_by` is the signed-in person's own email and that email is on an
+allow-list (`ca_dashboard_user`). Turn off public sign-ups in Supabase Auth first. For pause and resume it adds
+`ca_request_state_signed_in(p_state)`, which uses the signed-in email.
+
 ## What is not available yet
 
-- Starting the pipeline from an approval (`start_pipeline`): refused with `not_available`; the existing Start button is
-  the only way.
 - Campaign fields the Marketing Agent does not support (US-only, company size, preferred roles): the agent stores them,
   reports them under `not_applied`, and does not emit them.
 - Several campaigns live at once.
+- The dashboard's `is_active` and start/end dates do not gate the Marketing Agent unless `MA_LINK_RESPECT_SCHEDULE=true`.
 - Whether the Marketing Agent applies a published version needs its side of M8
   ([marketing-agent-m8-work.md](marketing-agent-m8-work.md)); until then `applied` stays `null` and level 6 is `skipped`.
 

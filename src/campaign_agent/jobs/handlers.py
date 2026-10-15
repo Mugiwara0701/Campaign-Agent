@@ -101,10 +101,12 @@ class Services:
 class Action:
     """A change to what is live. Done by the database functions, in the same transaction as the state."""
 
-    kind: Literal["publish", "activate", "deactivate"]
+    kind: Literal["publish", "activate", "deactivate", "start_pipeline"]
     version_no: int | None = None
     sha256: str | None = None
     approver: str = ""
+    # After the publish is committed, also start (or restart) the Marketing Agent's pipeline, as asked in the approval.
+    start_pipeline: bool = False
 
 
 @dataclass
@@ -363,11 +365,9 @@ def _discard(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
 def _approve(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
     """Approve exactly the candidate the user reviewed, and make it live."""
     payload = req.payload
-    if payload.get("start_pipeline"):
-        raise _fail(
-            ErrorCode.NOT_AVAILABLE,
-            "starting the pipeline from an approval is not available; use the Start button",
-        )
+    start_pipeline = payload.get("start_pipeline", False)
+    if not isinstance(start_pipeline, bool):
+        raise _fail(ErrorCode.INVALID_REQUEST, "start_pipeline must be true or false")
     version, sha = payload.get("version"), payload.get("sha256")
     if not isinstance(version, int) or isinstance(version, bool) or not isinstance(sha, str):
         raise _fail(
@@ -386,6 +386,10 @@ def _approve(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
             "effective_from": "next_pass",
             "already": True,
         }
+        if (
+            start_pipeline
+        ):  # approving again with the flag still starts it: the first attempt may have failed
+            t.action = Action("start_pipeline", version, sha, req.requested_by, start_pipeline=True)
         return
     if ws.conv.state is State.AWAITING_REVIEW:
         event = Event.APPROVE
@@ -419,7 +423,7 @@ def _approve(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
         )
     _refuse_unloadable_contract(svc, CONFIG_VERSION)
     t.conv = ws.conv.after(event).after(Event.PUBLISHED)
-    t.action = Action("publish", version, sha, req.requested_by)
+    t.action = Action("publish", version, sha, req.requested_by, start_pipeline)
     t.extra = {"published": True, "version": version, "effective_from": "next_pass"}
 
 

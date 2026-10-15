@@ -30,7 +30,8 @@ create table public.campaign (
     campaign_detail text,
     start_date date not null default current_date,
     end_date date not null default current_date + 30,
-    is_active boolean not null default true
+    is_active boolean not null default true,
+    created_at timestamptz not null default now()
 );
 alter table public.campaign enable row level security;
 create table public.emails (id serial primary key, body text);
@@ -65,6 +66,11 @@ def db(pg_url: str) -> Iterator[Database]:
     with psycopg.connect(pg_url, autocommit=True) as conn:
         conn.execute("truncate public.campaign cascade")
         conn.execute("truncate public.ca_heartbeat")
+        conn.execute("truncate public.ma_event")
+        conn.execute(
+            "update public.ca_control set desired_state = 'running', actual_state = 'running', "
+            "requested_by = null, requested_at = null"
+        )
         conn.execute("truncate public.emails")
     database = Database(pg_url)
     yield database

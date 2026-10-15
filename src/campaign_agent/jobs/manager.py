@@ -13,6 +13,8 @@ ca_publish, ca_activate and ca_deactivate, called in step 3 inside the same tran
 """
 
 import logging
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -36,7 +38,7 @@ from campaign_agent.jobs.requests import ErrorCode, Request, RequestError
 from campaign_agent.ma_status import MaStatus, fetch_status
 from campaign_agent.store import repositories as repo
 from campaign_agent.store.db import Conn, Database
-from campaign_agent.view import LastRequest, ReviewView, VersionView
+from campaign_agent.view import LastRequest, MaEventView, ReviewView, VersionView
 
 log = logging.getLogger("campaign_agent.manager")
 
@@ -57,6 +59,10 @@ class ManagerConfig:
     # Requests one requester may have picked up per minute; the rest are refused with rate_limited.
     # It keeps one noisy or hostile requester from using up the model. 0 turns the limit off.
     rate_limit_per_minute: int = 30
+    # Start on a new campaign by itself, when the dashboard saved it but sent no request (migration 0021).
+    auto_interpret: bool = True
+    auto_interpret_grace_s: int = 20
+    auto_interpret_max_age_h: int = 168
 
 
 def _request(row: dict[str, Any]) -> Request:
@@ -169,6 +175,32 @@ def with_applied(
     return view.model_copy(update={"applied": applied, "ma_error": error})
 
 
+def with_ma_events(view: ReviewView, rows: list[dict[str, Any]]) -> ReviewView:
+    """The events the Marketing Agent reported over the link, as the dashboard shows them."""
+    events = tuple(
+        MaEventView(
+            kind=r["kind"],
+            severity=r["severity"],
+            code=r["code"],
+            message=r["message"],
+            occurred_at=r["occurred_at"].isoformat(),
+            version=r["version_no"],
+            repeat_count=r["repeat_count"],
+        )
+        for r in rows
+    )
+    return view.model_copy(update={"ma_events": events})
+
+
+def _fetch_events(conn: Conn, campaign_id: str) -> list[dict[str, Any]] | None:
+    """None when migration 0017 is not applied yet (inside a savepoint, so the caller's transaction survives)."""
+    try:
+        with conn.transaction():
+            return repo.events_for_view(conn, campaign_id)
+    except (psycopg.errors.UndefinedTable, psycopg.errors.InsufficientPrivilege):
+        return None
+
+
 def refresh_applied(db: Database) -> bool:
     """Bring the live campaign's view up to date with what the Marketing Agent reports. Returns whether it changed."""
     with db.transaction() as conn:
@@ -183,6 +215,9 @@ def refresh_applied(db: Database) -> bool:
             return False
         before = ReviewView.model_validate(state["review_view"])
         after = with_applied(before, fetch_status(conn), cid, repo.versions_summary(conn, cid))
+        events = _fetch_events(conn, cid)
+        if events is not None:
+            after = with_ma_events(after, events)
         if after == before:
             return False
         repo.update_view(conn, cid, after.model_dump(mode="json"))
@@ -200,10 +235,57 @@ def _run_action(conn: Conn, req: Request, action: Action) -> list[str]:
     elif action.kind == "activate":
         assert action.version_no is not None  # noqa: S101
         done = repo.activate(conn, req.campaign_id, action.version_no)
+    elif action.kind == "start_pipeline":
+        return []  # nothing to change in the store: the pipeline is asked for after the commit
     else:
         repo.deactivate(conn, req.campaign_id)
         return []
     return [str(c) for c in done.get("superseded", [])]
+
+
+PIPELINE_STOP_WAIT_S = (
+    90.0  # how long a restart waits for a running pass to end before it asks for "running" again
+)
+
+
+def start_marketing_agent(
+    db: Database,
+    approver: str,
+    *,
+    wait_s: float = PIPELINE_STOP_WAIT_S,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
+) -> dict[str, Any]:
+    """After an approval was committed: run the Marketing Agent's pipeline on the new campaign, as its Start button does.
+
+    A pipeline that is already running only takes a campaign at its next pass, so it is stopped and started again (the
+    two requests need a gap, or the Marketing Agent, which looks every few seconds, would never see the stop). Never
+    raises into the caller's request: the campaign is live either way, and the answer says what happened."""
+    by = f"approved by {approver}"[:200]
+    with db.transaction() as conn:
+        state = repo.pipeline_state(conn)
+    if state is None:
+        return {"asked": False, "reason": "pipeline_not_readable"}
+    restarted = False
+    if "running" in (state["desired_state"], state["actual_state"]):
+        with db.transaction() as conn:
+            if not repo.request_pipeline(conn, "stopped", by):
+                return {"asked": False, "reason": "not_allowed"}
+        restarted = True
+        deadline = clock() + wait_s
+        stopped = False
+        while clock() < deadline:
+            with db.transaction() as conn:
+                now = repo.pipeline_state(conn)
+            if now is not None and now["actual_state"] == "stopped":
+                stopped = True
+                break
+            sleep(2.0)
+        if not stopped:
+            log.warning("the pipeline did not stop in time; asking for it to run again")
+    with db.transaction() as conn:
+        asked = repo.request_pipeline(conn, "running", by)
+    return {"asked": asked, "restarted": restarted, **({} if asked else {"reason": "not_allowed"})}
 
 
 def _refresh_superseded(conn: Conn, campaign_ids: list[str]) -> None:
@@ -257,10 +339,35 @@ def process_next(db: Database, svc: Services, cfg: ManagerConfig) -> bool:
         outcome = _store_or_refuse(db, req, ws, outcome)
     except Exception as exc:
         log.exception("request crashed", extra=context)
-        with db.transaction() as conn:
-            status = repo.release_request(conn, req.id, f"{type(exc).__name__}", cfg.max_attempts)
-        log.warning("request released", extra={**context, "status": status})
+        try:
+            with db.transaction() as conn:
+                status = repo.release_request(
+                    conn, req.id, f"{type(exc).__name__}", cfg.max_attempts
+                )
+        except (
+            Exception
+        ):  # the clean-up must never take the worker down: the next request is still waiting
+            log.exception("could not release the request", extra=context)
+            return True
+        if status == "gone":
+            log.warning(
+                "request dropped: it no longer exists (its campaign was deleted)", extra=context
+            )
+        else:
+            log.warning("request released", extra={**context, "status": status})
         return True
+    if outcome.error is None and outcome.action is not None and outcome.action.start_pipeline:
+        try:
+            note = start_marketing_agent(db, req.requested_by)
+        except Exception:
+            log.exception("could not ask for the pipeline to start", extra=context)
+            note = {"asked": False, "reason": "error"}
+        try:
+            with db.transaction() as conn:
+                repo.merge_request_result(conn, req.id, {"pipeline": note})
+        except Exception:
+            log.exception("could not record the pipeline request", extra=context)
+        log.info("pipeline requested after approval", extra={**context, **note})
     code = outcome.error.code.value if outcome.error else None
     log.info("request finished", extra={**context, "state": outcome.conv.state.value, "code": code})
     return True

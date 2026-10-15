@@ -4,8 +4,9 @@ Table design is in docs/supabase-tables.md. Nothing here knows about campaigns' 
 """
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
+import psycopg
 from psycopg.types.json import Jsonb
 
 from campaign_agent.store.db import Conn
@@ -153,7 +154,8 @@ def fail_request(
 
 
 def release_request(conn: Conn, request_id: str, detail: str, max_attempts: int) -> str:
-    """An unexpected error: try again later, until the attempts run out. Returns the new status."""
+    """An unexpected error: try again later, until the attempts run out. Returns the new status, or "gone" when the request
+    no longer exists (its campaign was deleted while it was being worked on): there is nothing left to release."""
     row = conn.execute(
         """
         update public.campaign_request
@@ -167,8 +169,7 @@ def release_request(conn: Conn, request_id: str, detail: str, max_attempts: int)
         """,
         (max_attempts, max_attempts, detail[:500], max_attempts, request_id),
     ).fetchone()
-    assert row is not None  # noqa: S101
-    return str(row["status"])
+    return str(row["status"]) if row is not None else "gone"
 
 
 # --- campaign and working state --------------------------------------------------------------------------------
@@ -360,3 +361,232 @@ def beat(
         """,
         (status, agent_version, model_name, request_id),
     )
+
+
+# --- pause and resume from the dashboard (migration 0019) -------------------------------------------------------------
+
+
+class Control(NamedTuple):
+    desired: str  # "running" or "paused": what the dashboard asked
+    ma_resume: (
+        bool | None
+    )  # the Marketing Agent was running when the pause came; None = migration 0020 not applied
+
+
+def read_control(conn: Conn) -> Control:
+    """What the dashboard asked of the Campaign Agent (migration 0019) and whether the Marketing Agent is to be started
+    again on resume (0020). A missing table or column reads as "running" / "not tracked", so a database without the
+    migrations behaves as before. Inside a savepoint, so the caller's transaction survives."""
+    try:
+        with conn.transaction():
+            row = conn.execute(
+                "select desired_state, ma_resume from public.ca_control where id = 1"
+            ).fetchone()
+        ma_resume: bool | None = bool(row["ma_resume"]) if row else None
+    except psycopg.errors.UndefinedColumn:
+        try:
+            with conn.transaction():
+                row = conn.execute(
+                    "select desired_state from public.ca_control where id = 1"
+                ).fetchone()
+        except (psycopg.errors.UndefinedTable, psycopg.errors.InsufficientPrivilege):
+            return Control("running", None)
+        ma_resume = None
+    except (psycopg.errors.UndefinedTable, psycopg.errors.InsufficientPrivilege):
+        return Control("running", None)
+    return Control("paused" if row and row["desired_state"] == "paused" else "running", ma_resume)
+
+
+def read_desired_state(conn: Conn) -> str:
+    return read_control(conn).desired
+
+
+def set_ma_resume(conn: Conn, value: bool) -> None:
+    with conn.transaction():
+        conn.execute(
+            "update public.ca_control set ma_resume = %s, updated_at = now() where id = 1", (value,)
+        )
+
+
+def report_actual_state(conn: Conn, state: str) -> None:
+    """Tell the dashboard what the worker is doing now. Quiet when the table is not there."""
+    try:
+        with conn.transaction():
+            conn.execute(
+                "update public.ca_control set actual_state = %s, state_since = now(), updated_at = now() "
+                "where id = 1 and actual_state <> %s",
+                (state, state),
+            )
+    except (psycopg.errors.UndefinedTable, psycopg.errors.InsufficientPrivilege):
+        return
+
+
+# --- starting on a new campaign by itself (migration 0021) -------------------------------------------------------------
+
+
+def auto_interpret_new_campaigns(conn: Conn, grace_s: int, max_age_h: int) -> list[str] | None:
+    """Send the `interpret` request for each new campaign nobody has started (see the migration for exactly which).
+    Returns their ids, or None when the function is not there or this role may not call it (0021 not applied)."""
+    try:
+        with conn.transaction():
+            rows = conn.execute(
+                "select started_campaign_id from public.ca_auto_interpret(%s, %s)",
+                (grace_s, max_age_h),
+            ).fetchall()
+    except (psycopg.errors.UndefinedFunction, psycopg.errors.InsufficientPrivilege):
+        return None
+    return [str(r["started_campaign_id"]) for r in rows]
+
+
+# --- starting the Marketing Agent's pipeline after an approval (migration 0018) ---------------------------------------
+
+
+def pipeline_state(conn: Conn) -> dict[str, Any] | None:
+    """The Marketing Agent's pipeline switch: what was asked and what it does. None when the table is not there or
+    this role may not read it. Inside a savepoint, so the caller's transaction survives."""
+    try:
+        with conn.transaction():
+            row = conn.execute(
+                "select desired_state, actual_state from public.pipeline_control where id = 1"
+            ).fetchone()
+    except (psycopg.errors.UndefinedTable, psycopg.errors.InsufficientPrivilege):
+        return None
+    return dict(row) if row else None
+
+
+def request_pipeline(conn: Conn, state: str, by: str) -> bool:
+    """Ask for the pipeline to run or stop, with the function the dashboard's Start button calls. False when this role
+    may not (migration 0018 not applied)."""
+    try:
+        with conn.transaction():
+            conn.execute("select * from public.request_pipeline(%s, %s)", (state, by[:200]))
+    except (psycopg.errors.UndefinedFunction, psycopg.errors.InsufficientPrivilege):
+        return False
+    return True
+
+
+def merge_request_result(conn: Conn, request_id: str, extra: dict[str, Any]) -> None:
+    """Add facts to a finished request's result (what happened after it was committed)."""
+    conn.execute(
+        "update public.campaign_request set result = coalesce(result, '{}'::jsonb) || %s where id = %s",
+        (Jsonb(extra), request_id),
+    )
+
+
+# --- the link to the Marketing Agent (docs/ca-ma-link.md) -------------------------------------------------------------
+
+
+def live_version_for_ma(conn: Conn, respect_schedule: bool = False) -> Row | None:
+    """The one live, approved version the Marketing Agent should run, or None when nothing is live.
+    With `respect_schedule` the dashboard's own settings apply as well: the campaign must be switched on
+    (`is_active`) and today must lie between its start and end dates."""
+    return conn.execute(
+        """
+        select s.campaign_id, v.version_no, v.sha256, v.contract_version, v.overlay_yaml,
+               v.approved_by, v.approved_at
+        from public.campaign_state s
+        join public.campaign_version v on v.id = s.active_version_id
+        join public.campaign c on c.id = s.campaign_id
+        where v.approved_at is not null
+          and (not %s or (c.is_active and current_date between c.start_date and c.end_date))
+        """,
+        (respect_schedule,),
+    ).fetchone()
+
+
+def store_event(
+    conn: Conn,
+    *,
+    event_id: str,
+    occurred_at: Any,
+    kind: str,
+    severity: str,
+    code: str,
+    message: str,
+    campaign_id: str | None,
+    version_no: int | None,
+    pass_id: str | None,
+    dedupe_key: str,
+    details: dict[str, Any],
+) -> None:
+    """Store one event. Safe to repeat: the same event_id is stored once.
+
+    A blocker whose dedupe_key already has an open blocker updates that one (and counts the repeat) instead of adding a
+    row. A `resolved` event closes the open blockers with its dedupe_key.
+    """
+    if conn.execute("select 1 from public.ma_event where event_id = %s", (event_id,)).fetchone():
+        return
+    if kind == "blocker":
+        updated = conn.execute(
+            """
+            update public.ma_event
+            set occurred_at = greatest(occurred_at, %s), severity = %s, message = %s, details = %s,
+                repeat_count = repeat_count + 1
+            where kind = 'blocker' and resolved_at is null and dedupe_key = %s
+            returning event_id
+            """,
+            (occurred_at, severity, message, Jsonb(details), dedupe_key),
+        ).fetchone()
+        if updated is not None:
+            return
+    conn.execute(
+        """
+        insert into public.ma_event (event_id, occurred_at, kind, severity, code, message, campaign_id,
+                                     version_no, pass_id, dedupe_key, details)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        on conflict (event_id) do nothing
+        """,
+        (
+            event_id,
+            occurred_at,
+            kind,
+            severity,
+            code,
+            message,
+            campaign_id,
+            version_no,
+            pass_id,
+            dedupe_key,
+            Jsonb(details),
+        ),
+    )
+    if kind == "resolved":
+        conn.execute(
+            """
+            update public.ma_event set resolved_at = %s
+            where kind = 'blocker' and resolved_at is null and dedupe_key = %s
+            """,
+            (occurred_at, dedupe_key),
+        )
+
+
+def events_for_view(conn: Conn, campaign_id: str) -> list[Row]:
+    """What the dashboard shows: every open blocker (newest first, at most 20) and the last few applied or rejected
+    events of this campaign."""
+    return conn.execute(
+        """
+        (select kind, severity, code, message, occurred_at, campaign_id, version_no, repeat_count,
+                (resolved_at is not null) as resolved
+         from public.ma_event where kind = 'blocker' and resolved_at is null
+         order by occurred_at desc limit 20)
+        union all
+        (select kind, severity, code, message, occurred_at, campaign_id, version_no, repeat_count,
+                (resolved_at is not null) as resolved
+         from public.ma_event where kind in ('applied', 'rejected') and campaign_id = %s
+         order by occurred_at desc limit 5)
+        order by occurred_at desc
+        """,
+        (campaign_id,),
+    ).fetchall()
+
+
+def prune_events(conn: Conn) -> int:
+    """Delete old events: info after 7 days, applied/rejected/resolved and closed blockers after 30. Open blockers stay."""
+    return conn.execute(
+        """
+        delete from public.ma_event
+        where (kind = 'info' and received_at < now() - interval '7 days')
+           or (kind in ('applied', 'rejected', 'resolved') and received_at < now() - interval '30 days')
+           or (kind = 'blocker' and resolved_at is not null and resolved_at < now() - interval '30 days')
+        """
+    ).rowcount

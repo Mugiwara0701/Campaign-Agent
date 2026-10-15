@@ -11,3 +11,7 @@ af1ac94b5094c4d90a2ba9150e8f59a6029c42d9:benchmarks/dataset/cases.jsonl:generic-
 af1ac94b5094c4d90a2ba9150e8f59a6029c42d9:benchmarks/dataset/cases.jsonl:generic-api-key:87
 af1ac94b5094c4d90a2ba9150e8f59a6029c42d9:benchmarks/dataset/cases.jsonl:generic-api-key:88
 af1ac94b5094c4d90a2ba9150e8f59a6029c42d9:benchmarks/build_dataset.py:generic-api-key:373
+
+# An example request in docs/dashboard-api.md (the idempotency_key value "interpret-" plus a made-up campaign id)
+# looks like a key to the scanner. It is an invented example, not a credential (the doc text is changed since).
+6183a1496f69f04f08d42e4aa808d3dadf6f5911:docs/dashboard-api.md:generic-api-key:48

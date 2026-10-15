@@ -67,7 +67,7 @@ A refused request has `status = failed` and one of these codes; it never changes
 | `needs_rephrase` | the model's reply could not be read, even after one repair |
 | `model_unavailable` | the model did not answer; the draft is kept and the state is `MODEL_UNAVAILABLE`. Send `interpret` again |
 | `invalid_answer` | an answer was refused; `result.errors` lists which and why |
-| `not_available` | `start_pipeline` on an approval: the Start button is the only way for now |
+| `not_available` | no longer sent; `start_pipeline` on an approval is accepted (see `docs/publishing.md`) |
 | `stale_approval` | the approved version is not the latest candidate, or its text changed; `result.current` has the one to review |
 | `publish_blocked` | the candidate no longer passes the checks when approved; the campaign is `VALIDATION_FAILED`; `result.issues` says why |
 | `publish_failed` | the store did not accept the change; nothing was applied and the same approval can be sent again |

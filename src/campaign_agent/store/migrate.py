@@ -81,11 +81,11 @@ def describe(url: str) -> Target:
     )
 
 
-def agent_url_hint(owner_url: str) -> str:
+def agent_url_hint(owner_url: str, role: str = "campaign_agent") -> str:
     """The DATABASE_URL shape for the limited role, with a placeholder where the password goes."""
     target = describe(owner_url)
     suffix = target.user.split(".", 1)[1] if "." in target.user else ""
-    user = f"campaign_agent.{suffix}" if suffix else "campaign_agent"
+    user = f"{role}.{suffix}" if suffix else role
     port = f":{target.port}" if target.port else ""
     return f"postgresql://{user}:<the-password>@{target.host}{port}/{target.database}"
 
@@ -140,8 +140,10 @@ def valid_password(password: str) -> bool:
     return bool(_PASSWORD.match(password))
 
 
-def set_agent_password(db: Database, password: str) -> None:
-    """Give the limited campaign_agent role a login and this password. The role comes from migration 0013."""
+def set_agent_password(db: Database, password: str, role: str = "campaign_agent") -> None:
+    """Give a limited role a login and this password: campaign_agent (migration 0013) or campaign_dashboard (0014)."""
+    if role not in ("campaign_agent", "campaign_dashboard"):
+        raise ValueError("only the two limited roles can be given a login here")
     if not valid_password(password):
         raise ValueError(
             "the password must be 20 to 100 characters from A-Z a-z 0-9 . _ ~ - (it goes into a URL)"
@@ -149,13 +151,13 @@ def set_agent_password(db: Database, password: str) -> None:
     try:
         with db.transaction() as conn:
             conn.execute(
-                sql.SQL("alter role campaign_agent with login password {}").format(
-                    sql.Literal(password)
+                sql.SQL("alter role {} with login password {}").format(
+                    sql.Identifier(role), sql.Literal(password)
                 )
             )
     except psycopg.errors.UndefinedObject as exc:
         raise MigrationError(
-            "campaign_agent", "UndefinedObject", "the role does not exist: run migrate first"
+            role, "UndefinedObject", "the role does not exist: run migrate first"
         ) from exc
 
 
@@ -220,10 +222,16 @@ def run_agent_password(
     *,
     prompt: Callable[[str], str] = getpass.getpass,
     out: Callable[[str], None] = print,
+    role: str = "campaign_agent",
 ) -> int:
     out(f"database: {describe(url)}")
     out(
-        "Sets the login password of the limited 'campaign_agent' role (the worker uses it, not the owner)."
+        f"Sets the login password of the limited '{role}' role "
+        + (
+            "(the worker uses it, not the owner)."
+            if role == "campaign_agent"
+            else "(the dashboard gateway uses it, not the owner)."
+        )
     )
     out('Make a good one with:  python3 -c "import secrets; print(secrets.token_urlsafe(24))"')
     first = prompt("New password (not shown): ")
@@ -235,14 +243,20 @@ def run_agent_password(
         return 1
     db = Database(url)
     try:
-        set_agent_password(db, first)
+        set_agent_password(db, first, role)
     except MigrationError as exc:
         out(f"FAILED  {exc}")
         return 1
     finally:
         db.close()
-    out(
-        "Done. Put it in the .env that goes to the office machine, then: bash deploy/remote.sh push-env && bash deploy/remote.sh up"
-    )
-    out(f"  DATABASE_URL={agent_url_hint(url)}")
+    if role == "campaign_agent":
+        out(
+            "Done. Put it in the .env that goes to the office machine, then: bash deploy/remote.sh push-env && bash deploy/remote.sh up"
+        )
+        out(f"  DATABASE_URL={agent_url_hint(url)}")
+    else:
+        out(
+            "Done. Put it in the gateway's environment on Render (never in the dashboard's browser code):"
+        )
+        out(f"  API_DATABASE_URL={agent_url_hint(url, role)}")
     return 0

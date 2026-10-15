@@ -47,14 +47,13 @@ def test_the_service_unit_is_sandboxed_and_does_not_break_the_downstream_check()
         "TasksMax",
         "LimitNOFILE",
         "NoNewPrivileges",
-        "PrivateTmp",
         "UMask",
         "StartLimitBurst",
         "TimeoutStopSec",
     ):
         assert needed in lines, needed
-    # level 6 starts the Marketing Agent's loader in a new network namespace
-    assert "RestrictNamespaces" not in lines and "PrivateNetwork" not in lines
+    # level 6 starts the Marketing Agent's loader in a new network namespace; each of these stops it
+    assert not {"RestrictNamespaces", "PrivateNetwork", "PrivateTmp"} & lines
 
 
 def test_the_scripts_split_the_work_that_needs_sudo() -> None:
