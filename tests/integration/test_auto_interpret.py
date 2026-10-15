@@ -77,6 +77,14 @@ def test_an_old_campaign_is_not_suddenly_interpreted(db) -> None:  # type: ignor
     assert sweep(db, max_age_h=24 * 60) == [cid]
 
 
+def test_a_campaign_the_dashboard_deleted_is_not_started(db) -> None:  # type: ignore[no-untyped-def]
+    cid = new_campaign(db)
+    with db.transaction() as conn:
+        conn.execute("update public.campaign set deleted_at = now() where id = %s", (cid,))
+    assert sweep(db) == []
+    assert requests_of(db, cid) == []
+
+
 def test_the_worker_starts_on_it_by_itself_and_the_manager_reads_it(db) -> None:  # type: ignore[no-untyped-def]
     cid = new_campaign(
         db,

@@ -31,7 +31,8 @@ create table public.campaign (
     start_date date not null default current_date,
     end_date date not null default current_date + 30,
     is_active boolean not null default true,
-    created_at timestamptz not null default now()
+    created_at timestamptz not null default now(),
+    deleted_at timestamptz
 );
 alter table public.campaign enable row level security;
 create table public.emails (id serial primary key, body text);
