@@ -111,6 +111,11 @@ calls. It is a small Python web service from this repository.
 3. If it returns 503 "a migration is missing", migration 0022 or the login ("Before Render", step 2) was not done. If it does not
    start, open the Render logs: it prints that `API_DATABASE_URL` and `API_TOKEN` must be set.
 
+### Where it is deployed
+
+The gateway is live at `https://campaign-agent-maha.onrender.com` (health: `/health`). The token is held by the owner and is
+given to the dashboard developer separately; it is not written in any file in this repository.
+
 ### Give it to the dashboard
 
 1. In the dashboard's **server** environment set `CA_GATEWAY_URL` (the Render address) and `CA_GATEWAY_TOKEN` (the same token).
