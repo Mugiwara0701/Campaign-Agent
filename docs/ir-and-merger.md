@@ -32,6 +32,10 @@ applied and what was rejected, and never changes its input.
 - `meta.id`, `meta.revision`, `meta.contract_version` and `objective.type` are set by the system only.
 - Fields the contract cannot express yet (`audience.include_countries`, `employee_min/max`, `contacts.preferred_roles`,
   `audience.signals`) are stored but marked `proposed`; the "not applied" report (M3) lists them.
+  `audience.include_countries` is the one exception: it is also written as `search.query_suffix` (the country names,
+  added to every search query) unless the user set a suffix. That is a hint, not a filter: the Marketing Agent cannot
+  yet reject a company outside the countries, so the report still lists it, with kind `partially_applied`. The strict
+  version (`targeting.include_countries`, enforced by the Marketing Agent) is the proposed next step.
 - Statements about our own organisation go to `organisation_context` and are never emitted.
 
 ## Web suggestions (decision)

@@ -111,6 +111,18 @@ class VersionView(_V):
     live: bool = False
 
 
+class MaEventView(_V):
+    """An event the Marketing Agent sent over the link: an open blocker, or what happened to this campaign."""
+
+    kind: str
+    severity: str
+    code: str
+    message: str
+    occurred_at: str
+    version: int | None = None
+    repeat_count: int = 1
+
+
 class ReviewView(_V):
     campaign_id: str
     state: str
@@ -133,6 +145,8 @@ class ReviewView(_V):
         None  # why the Marketing Agent refused the live version, as it reported it
     )
     versions: tuple[VersionView, ...] = ()
+    # Open blockers the Marketing Agent reported, and the last applied or rejected events of the live campaign.
+    ma_events: tuple[MaEventView, ...] = ()
 
     def with_candidate_version(self, version: int) -> "ReviewView":
         assert self.candidate is not None  # noqa: S101

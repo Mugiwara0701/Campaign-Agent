@@ -1,0 +1,19 @@
+# The dashboard gateway on Render (docs/dashboard-api.md). The Campaign Agent itself stays on the office machine.
+# Create it with "New > Blueprint" in Render and point it at this repository; Render asks for the two secrets below.
+services:
+  - type: web
+    name: campaign-agent-gateway
+    runtime: python
+    plan: free
+    buildCommand: pip install .
+    startCommand: python -m campaign_agent api
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      # The limited campaign_dashboard login (python -m campaign_agent dashboard-password prints its shape). Never the owner's.
+      - key: API_DATABASE_URL
+        sync: false
+      # A long random secret (32+ characters) shared with the dashboard's server, nobody else.
+      - key: API_TOKEN
+        sync: false

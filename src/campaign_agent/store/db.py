@@ -27,6 +27,13 @@ class Database:
                 row_factory=dict_row,
                 prepare_threshold=None,
                 connect_timeout=15,
+                # A connection the network has silently dropped must fail in about a minute, not hang for hours
+                # (this also keeps `stop` quick). Client-side libpq settings: a connection pooler accepts them.
+                keepalives=1,
+                keepalives_idle=20,
+                keepalives_interval=10,
+                keepalives_count=3,
+                tcp_user_timeout=45000,
             )
         return self._conn
 
@@ -41,6 +48,10 @@ class Database:
             if not conn.closed:
                 conn.rollback()
             raise
+
+    def clone(self) -> "Database":
+        """A second, independent connection to the same database (for a thread: one connection is not shared)."""
+        return Database(self._url)
 
     def close(self) -> None:
         if self._conn is not None and not self._conn.closed:

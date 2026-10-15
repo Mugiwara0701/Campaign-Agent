@@ -2,7 +2,9 @@
 
 The overlay holds only what the user set. Nothing is emitted for:
   * `defaulted` values: the base config already supplies them; pinning a default would freeze it;
-  * fields the contract has no key for (reported as "not applied" instead);
+  * fields the contract has no key for (reported as "not applied" instead). One is applied only as a hint:
+    `audience.include_countries` becomes `search.query_suffix` (the country names, added to every search query).
+    The Marketing Agent cannot yet reject companies outside the countries, so it is still reported, as partly applied;
   * `search.capabilities`: in the MA, project_context.engineering_requirements replaces it when set.
 
 Merge semantics (overlay over base):
@@ -96,6 +98,25 @@ _PROPOSALS = {
 }
 
 
+_SUFFIX_MAX_CHARS = 80  # the contract's QuerySuffix
+_SUFFIX_OK = re.compile(r"^[\w .,'&/+()#-]*$")
+PARTLY_APPLIED = "partially_applied"
+
+
+def _country_hint(ir: CampaignIR, search: Mapping[str, Any]) -> str | None:
+    """The countries as a search suffix ("Germany Austria"), or None. A hint, not a filter: the search leans that way.
+    Never overwrites a suffix the user set, and only takes the countries that fit the contract's limits."""
+    if not _emit(ir, "audience.include_countries") or "query_suffix" in search:
+        return None
+    text = ""
+    for country in get_value(ir, "audience.include_countries"):
+        candidate = f"{text} {country}".strip()
+        if len(candidate) > _SUFFIX_MAX_CHARS or not _SUFFIX_OK.match(candidate):
+            break
+        text = candidate
+    return text or None
+
+
 @dataclass(frozen=True)
 class NotApplied:
     """A request that could not be expressed in the configuration. Never dropped silently."""
@@ -149,16 +170,28 @@ def compile_overlay(ir: CampaignIR) -> CompiledOverlay:
     for key in EXCLUDE_KEYS:
         if key in top:
             data[key] = top[key]
+    hint = _country_hint(ir, sections["search"])
+    if hint:
+        sections["search"]["query_suffix"] = hint
+        data["search"] = sections["search"]
     if sections["limits"]:
         data["limits"] = sections["limits"]
-    return CompiledOverlay(data, tuple(_not_applied(ir)))
+    return CompiledOverlay(data, tuple(_not_applied(ir, hint)))
 
 
-def _not_applied(ir: CampaignIR) -> list[NotApplied]:
+def _not_applied(ir: CampaignIR, country_hint: str | None = None) -> list[NotApplied]:
     out: list[NotApplied] = []
     for path, (reason, proposal) in _PROPOSALS.items():
         if path in REGISTRY and _is_set(get_value(ir, path)):
-            out.append(NotApplied(f"{path} = {get_value(ir, path)!r}", reason, proposal))
+            request = f"{path} = {get_value(ir, path)!r}"
+            if path == "audience.include_countries" and country_hint:
+                reason = (
+                    f'Used only as a search hint: "{country_hint}" is added to every search query, so results lean '
+                    "that way. The Marketing Agent cannot yet reject companies outside the countries."
+                )
+                out.append(NotApplied(request, reason, proposal, kind=PARTLY_APPLIED))
+                continue
+            out.append(NotApplied(request, reason, proposal))
     for item in ir.unsupported:
         out.append(NotApplied(item.request, item.reason, item.proposal, kind=item.kind))
     return out

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Ftechiz Solutions Office
+Comment=Opens the Campaign Agent window when the desktop starts
+Exec=__DIR__/deploy/start-ui.sh
+Terminal=false
+X-GNOME-Autostart-enabled=true

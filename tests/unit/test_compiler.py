@@ -94,9 +94,12 @@ def test_unsupported_requests_are_reported_not_dropped() -> None:
         "contacts.preferred_roles",
     } <= proposals
     text = str(result.data)
-    assert "US" not in text
     assert "cto" not in text
     assert "employee" not in text
+    # the countries are used only as a search hint, and that is said, never presented as a filter
+    assert result.data["search"] == {"query_suffix": "US"}
+    countries = next(n for n in result.not_applied if n.proposal == "targeting.include_countries")
+    assert countries.kind == "partially_applied" and "search hint" in countries.reason
 
 
 def test_compile_is_pure_and_repeatable() -> None:
@@ -165,3 +168,25 @@ def test_effective_hash_is_stable_and_changes_with_content() -> None:
         merge_onto_base({"config_version": "1.0"}, base)
     )
     assert effective_config_hash(a) != effective_config_hash(b)
+
+
+def test_several_countries_become_one_search_hint_that_fits_the_contract() -> None:
+    data = compile_overlay(ir_with(("audience.include_countries", ["Germany", "Austria", "Switzerland"]))).data
+    assert data["search"]["query_suffix"] == "Germany Austria Switzerland"
+    CampaignOverlay.model_validate(data)
+    many = [f"Country{i}" for i in range(30)]
+    suffix = compile_overlay(ir_with(("audience.include_countries", many))).data["search"]["query_suffix"]
+    assert len(suffix) <= 80 and suffix.startswith("Country0 Country1")
+
+
+def test_a_search_suffix_the_user_set_is_never_replaced_by_the_countries() -> None:
+    result = compile_overlay(
+        ir_with(("limits.query_suffix", "EV charging"), ("audience.include_countries", ["Germany"]))
+    )
+    assert result.data["search"]["query_suffix"] == "EV charging"
+    note = next(n for n in result.not_applied if n.proposal == "targeting.include_countries")
+    assert note.kind == "unsupported_field"  # not applied at all: it must not claim a hint that was not written
+
+
+def test_no_countries_means_no_hint() -> None:
+    assert "search" not in compile_overlay(ir_with(("audience.products", ["kiosk"]))).data

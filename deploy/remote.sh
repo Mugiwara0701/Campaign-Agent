@@ -32,6 +32,7 @@ Commands:
   setup                 on the office machine: install Python 3.12, Ollama, the model and the dependencies
   deps                  sync, then install/update the Python dependencies there
   install-service       one-time: install the long-running service (campaign-agent)
+  install-ui            one-time: open the Campaign Agent window by itself when the desktop starts (login)
   deploy [--env]        sync [+ push-env], install dependencies, restart the service
   rollback <git-ref>    put the code of an earlier commit or tag on the office machine and restart (see docs/runbook.md)
   up                    sync, then (re)start the service
@@ -153,6 +154,11 @@ case "$cmd" in
     do_sync
     # shellcheck disable=SC2016  # expanded on the office machine, on purpose
     rssh "mkdir -p ~/.config/systemd/user && sed 's#%h/Campaign-Agent#'\$HOME/$REMOTE_DIR'#g' ~/$REMOTE_DIR/deploy/campaign-agent.service > ~/.config/systemd/user/$SERVICE && systemctl --user daemon-reload && systemctl --user enable $SERVICE && (loginctl enable-linger \"\$USER\" 2>/dev/null || echo 'note: run once on the office machine: sudo loginctl enable-linger \$USER  (so the service runs without a login)') && echo 'installed: $SERVICE. Start it with: bash deploy/remote.sh up'"
+    ;;
+  install-ui)
+    do_sync
+    # shellcheck disable=SC2016  # expanded on the office machine, on purpose
+    rssh "chmod +x ~/$REMOTE_DIR/deploy/start-ui.sh && mkdir -p ~/.config/autostart && sed 's#__DIR__#'\$HOME/$REMOTE_DIR'#g' ~/$REMOTE_DIR/deploy/campaign-agent-ui.desktop > ~/.config/autostart/campaign-agent-ui.desktop && echo 'installed: the window opens at login (~/.config/autostart/campaign-agent-ui.desktop). Remove that file to stop it.'"
     ;;
   deploy)
     do_sync
