@@ -40,6 +40,9 @@ class Snapshot:
     lines: tuple[Line, ...]
     requests: tuple[str, ...]
     events: tuple[str, ...]
+    # The newest requests to the Campaign Agent, whoever sent them (the dashboard, this window): for the window to show the
+    # manager at work. Each: id, type, status, by, name (the campaign), state (the campaign's), age_s, error.
+    jobs: tuple[dict[str, Any], ...] = ()
 
 
 def _num(value: object) -> float:
@@ -144,6 +147,30 @@ def _queue(conn: Conn) -> tuple[Line, tuple[str, ...]]:
     ), rows
 
 
+def _jobs(conn: Conn) -> tuple[dict[str, Any], ...]:
+    rows = _query(
+        conn,
+        "select r.id::text as id, r.request_type, r.status, r.requested_by, r.error_code, left(c.campaign_name, 60) as name, "
+        "s.current_state as state, extract(epoch from now() - r.created_at) as age "
+        "from public.campaign_request r join public.campaign c on c.id = r.campaign_id "
+        "left join public.campaign_state s on s.campaign_id = r.campaign_id "
+        "order by r.created_at desc limit 6",
+    )
+    return tuple(
+        {
+            "id": r["id"],
+            "type": r["request_type"],
+            "status": r["status"],
+            "by": r["requested_by"],
+            "name": r["name"],
+            "state": r["state"],
+            "age_s": round(_num(r["age"])),
+            "error": r["error_code"],
+        }
+        for r in rows or []
+    )
+
+
 def _campaign(conn: Conn) -> Line:
     rows = _query(
         conn,
@@ -245,12 +272,14 @@ def collect(db: Database, settings: Settings) -> Snapshot:
     lines = [db_line]
     requests: tuple[str, ...] = ()
     events: tuple[str, ...] = ()
+    jobs: tuple[dict[str, Any], ...] = ()
     if db_line.state == OK:
         try:
             with db.transaction() as conn:
                 lines.append(_worker(conn, settings.llm_model))
                 lines.append(_model(settings))
                 queue, requests = _queue(conn)
+                jobs = _jobs(conn)
                 lines.append(queue)
                 lines.append(_campaign(conn))
                 lines.append(_link(settings))
@@ -261,7 +290,7 @@ def collect(db: Database, settings: Settings) -> Snapshot:
     else:
         lines.append(_model(settings))
         lines.append(_link(settings))
-    return Snapshot(tuple(lines), requests, events)
+    return Snapshot(tuple(lines), requests, events, jobs)
 
 
 def render(snap: Snapshot, *, banner: str, stamp: str) -> str:

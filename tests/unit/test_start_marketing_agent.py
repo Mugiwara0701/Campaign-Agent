@@ -84,3 +84,52 @@ def test_an_unreadable_pipeline_table_is_reported(monkeypatch: Any) -> None:
         "asked": False,
         "reason": "pipeline_not_readable",
     }  # type: ignore[arg-type]
+
+
+def _nothing_live(monkeypatch: Any) -> None:
+    monkeypatch.setattr(manager.repo, "live_version_for_ma", lambda conn, respect=False: None)
+
+
+def test_switching_off_does_not_stop_the_work_of_another_live_campaign(monkeypatch: Any) -> None:
+    p = _Pipeline("running", "running")
+    monkeypatch.setattr(manager.repo, "pipeline_state", p.state)
+    monkeypatch.setattr(manager.repo, "request_pipeline", p.request)
+    monkeypatch.setattr(
+        manager.repo, "live_version_for_ma", lambda conn, respect=False: {"campaign_id": "other"}
+    )
+    assert manager.stop_marketing_agent(_Db(), "x") == {
+        "asked": False,
+        "reason": "another_campaign_is_live",
+    }  # type: ignore[arg-type]
+    assert p.asked == []
+
+
+def test_switching_a_campaign_off_stops_a_running_marketing_agent(monkeypatch: Any) -> None:
+    _nothing_live(monkeypatch)
+    p = _Pipeline("running", "running")
+    monkeypatch.setattr(manager.repo, "pipeline_state", p.state)
+    monkeypatch.setattr(manager.repo, "request_pipeline", p.request)
+    assert manager.stop_marketing_agent(_Db(), "priya@example.com") == {"asked": True}  # type: ignore[arg-type]
+    assert p.asked == ["stopped"]
+
+
+def test_a_marketing_agent_that_is_already_stopped_is_left_alone(monkeypatch: Any) -> None:
+    _nothing_live(monkeypatch)
+    p = _Pipeline("stopped", "stopped")
+    monkeypatch.setattr(manager.repo, "pipeline_state", p.state)
+    monkeypatch.setattr(manager.repo, "request_pipeline", p.request)
+    assert manager.stop_marketing_agent(_Db(), "x") == {"asked": False, "already_stopped": True}  # type: ignore[arg-type]
+    assert p.asked == []
+
+
+def test_stopping_without_the_grant_or_the_table_says_why(monkeypatch: Any) -> None:
+    _nothing_live(monkeypatch)
+    p = _Pipeline("running", "running", allowed=False)
+    monkeypatch.setattr(manager.repo, "pipeline_state", p.state)
+    monkeypatch.setattr(manager.repo, "request_pipeline", p.request)
+    assert manager.stop_marketing_agent(_Db(), "x") == {"asked": False, "reason": "not_allowed"}  # type: ignore[arg-type]
+    monkeypatch.setattr(manager.repo, "pipeline_state", lambda conn: None)
+    assert manager.stop_marketing_agent(_Db(), "x") == {
+        "asked": False,
+        "reason": "pipeline_not_readable",
+    }  # type: ignore[arg-type]

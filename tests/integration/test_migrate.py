@@ -27,7 +27,7 @@ def url(pg_url: str) -> Iterator[str]:
     target = f"{base}/{DB}"
     with psycopg.connect(target, autocommit=True) as conn:
         conn.execute(
-            "create table public.campaign (id uuid primary key default gen_random_uuid(), campaign_name text not null, campaign_detail text, created_at timestamptz not null default now())"
+            "create table public.campaign (id uuid primary key default gen_random_uuid(), campaign_name text not null, campaign_detail text, created_at timestamptz not null default now(), deleted_at timestamptz)"
         )
         conn.execute(
             "create table public.schema_migrations (name text primary key, applied_at timestamptz not null default now())"

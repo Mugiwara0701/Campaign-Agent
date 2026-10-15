@@ -127,3 +127,20 @@ def test_the_window_opens_full_screen_unless_told_otherwise() -> None:
     assert "--start-fullscreen" not in window_command(
         "chrome", "http://127.0.0.1:8765/", fullscreen=False
     )
+
+
+def test_the_state_carries_the_jobs_for_the_office_window(monkeypatch: Any) -> None:
+    job = {
+        "id": "r1",
+        "type": "interpret",
+        "status": "pending",
+        "by": "priya@example.com",
+        "name": "EV charger",
+        "state": None,
+        "age_s": 1,
+        "error": None,
+    }
+    snap = Snapshot((Line("Database", "ok", "reachable"),), (), (), (job,))
+    monkeypatch.setattr("campaign_agent.console_web.collect", lambda db, settings: snap)
+    c = TestClient(create_app(object(), object(), 8765), base_url="http://127.0.0.1:8765")  # type: ignore[arg-type]
+    assert c.get("/api/state").json()["jobs"] == [job]

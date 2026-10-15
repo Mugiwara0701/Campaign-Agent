@@ -317,13 +317,19 @@ def test_stopping_a_live_campaign() -> None:
     out = handle(request("deactivate"), published(VersionInfo(1, "a" * 64, True, True)), svc())
     assert out.error is None
     assert out.action is not None and out.action.kind == "deactivate"
+    assert out.action.stop_pipeline is True  # a campaign switched off stops the Marketing Agent too
     assert out.result["live_version"] is None
 
 
 def test_stopping_a_campaign_that_is_not_live_is_a_repeat() -> None:
     out = handle(request("deactivate"), published(VersionInfo(1, "a" * 64, True, False)), svc())
-    assert out.error is None and out.action is None
-    assert out.result["already"] is True
+    assert out.error is None and out.result["already"] is True
+    # nothing to switch off in the store, but the Marketing Agent may still be running: it is asked to stop
+    assert (
+        out.action is not None
+        and out.action.kind == "stop_pipeline"
+        and out.action.stop_pipeline is True
+    )
 
 
 # --- changing a campaign that is already published -------------------------------------------------------------------------

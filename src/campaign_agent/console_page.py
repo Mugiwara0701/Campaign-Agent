@@ -132,7 +132,7 @@ function cable(state,t,busy){
 // ---------------- what the real world says ----------------
 const S={paused:false,worker:'off',model:'off',db:'off',link:'off',ma:'off',waiting:0,running:0,blockers:0,maWorking:false};
 const F={id:null,notes:[],state:'NEW',busy:false,live:false,q:[],cand:null,failed:null,shown:'',yaml:false,pipe:null};
-const scene_={thinking:false,fileOnDesk:false,token:null,maWorking:false,maAlert:false,maOffer:false};
+const scene_={thinking:false,fileOnDesk:false,token:null,maWorking:false,maAlert:false,maOffer:false,carry:false,handedOver:false};
 function readState(){
   const g=n=>{const l=data.lines.find(x=>x.name===n);return l?l.state:'off'};
   S.worker=g('Worker');S.paused=!!data.lines.find(x=>x.name==='Worker'&&/^paused/.test(x.detail));S.model=g('Model server');S.db=g('Database');S.link=g('Link to MA');S.ma=g('Marketing Agent');
@@ -150,14 +150,17 @@ function draw(){
   R(40,14,30,20,'#9fd3ff');R(54,14,2,20,'#41375e');R(222,14,30,20,'#9fd3ff');R(236,14,2,20,'#41375e');
   const mgrAsleep=!sim&&(S.worker==='fail'||S.worker==='off');
   mgr.bubble=!sim&&S.paused?'PAUSED':(mgr.bubble==='PAUSED'?'':mgr.bubble);mgr.bcol='#ffd84a';
+  const jobsBusy=!sim&&S.running>0&&!S.paused;   // a request is being worked on (from the dashboard or from this window)
+  if(jobsBusy&&mgr.bubble==='')mgr.bubble='...';else if(!jobsBusy&&mgr.bubble==='...'&&!scene_.thinking)mgr.bubble='';
   desk(24,70,76);monitor(36,52,!sim&&S.model==='fail'?'fail':(mgrAsleep||(!sim&&S.paused)?'off':'ok'),t);monitor(66,52,mgrAsleep||(!sim&&S.paused)?'off':'ok',t+30);
   cabinet(118,52,sim?'ok':S.db);lamp(18,50,sim||S.model==='ok');
   if(S.waiting&&!sim)letters(30,90,S.waiting);
-  if(scene_.thinking)paper(80,76,1+Math.floor(t/12)%5);else if(scene_.fileOnDesk)paper(80,76,5);
+  if(scene_.thinking||jobsBusy)paper(80,76,1+Math.floor(t/12)%5);else if(scene_.fileOnDesk)paper(80,76,5);
   desk(208,70,76);monitor(222,52,scene_.maWorking?'ok':'off',t);if(scene_.maWorking&&emp.sit){paper(262,76,3,'#2f9e5b')}
   cable(sim?'ok':S.link,t,scene_.maWorking||!!scene_.token);
   c.fillStyle='#f8f4e8';c.fillText('TAILSCALE',134,184);
   if(scene_.token){const p=cablePt(scene_.token.d);R(p[0]-6,p[1]-8,13,16,'#fff');R(p[0]-4,p[1]-5,9,1,'#3b6fd6');R(p[0]-4,p[1]-2,7,1,'#3b6fd6');R(p[0]-4,p[1]+1,9,1,'#3b6fd6');c.fillStyle='#ffd84a';c.fillText('FILE',p[0]-8,p[1]-17)}
+  if(scene_.carry)paper(Math.round(emp.x)-20,Math.round(emp.y)-16,3,'#2f9e5b');
   [mgr,ceo,emp].forEach(step);
   person(emp,'#2f9e5b','#3b2a1a',null,{work:scene_.maWorking&&emp.sit,sad:scene_.maAlert});
   person(mgr,'#2b5fbf','#171717','#e0443e',{work:!mgrAsleep&&(mgr.sit),sleep:mgrAsleep});
@@ -199,12 +202,19 @@ async function ceoBrief(text){
 async function managerStartsWriting(){scene_.thinking=true;mgr.bubble='...';mgr.bcol='#f8f4e8';await say('MANAGER','Reading the request... (my model runs on this machine, it can take a few minutes)')}
 async function managerAsks(){scene_.thinking=false;mgr.bubble='?';mgr.bcol='#ffd84a';await say('MANAGER','CEO, I have questions. I cannot write the file without your answers.')}
 async function fileReady(){scene_.thinking=false;scene_.fileOnDesk=true;mgr.bubble='';await say('MANAGER','The leadgen file is ready, sir. Please read it and approve it below. Nothing is sent until you do.')}
+// The approval: the manager calls the Marketing Agent into his office, hands over the leadgen file, and the Marketing Agent
+// walks back to its own room and sits down to work. Used for an approval from this window and from the dashboard.
 async function deliver(){
-  scene_.fileOnDesk=false;mgr.bubble='';await say('MANAGER','Approved. The file is live. Calling the Marketing Agent now...');
-  mgr.bubble='tel';mgr.bcol='#cfe8ff';scene_.token={d:0};
-  while(scene_.token.d<CLEN){scene_.token.d+=2.2;await sleep(16)}
-  scene_.token=null;mgr.bubble='';
-  await say('CABLE','The leadgen file reached the Marketing Floor.');
+  scene_.fileOnDesk=false;mgr.bubble='tel';mgr.bcol='#cfe8ff';
+  await say('MANAGER','Approved. The leadgen file is live. Marketing Agent, please come to my office.');
+  mgr.bubble='';scene_.maAlert=false;
+  if(!emp.vis){emp.vis=true;emp.x=352;emp.y=130;emp.sit=false;emp.face=-1;emp.bubble='';scene_.maWorking=false;await go(emp,[[300,130],[252,128],[96,128],TALK_E])}
+  else{emp.bubble='';scene_.maWorking=false;await go(emp,TO_MGR_E)}
+  emp.face=-1;mgr.face=1;emp.bubble='ok';emp.bcol='#d6ffd6';
+  scene_.fileOnDesk=true;await sleep(700);scene_.fileOnDesk=false;scene_.carry=true;            // the file changes hands
+  await say('EMPLOYEE','Got the leadgen file, boss. Back to my room, and I start the work.');
+  await go(emp,[[96,128],[252,128],SEAT_E]);emp.sit=true;emp.face=-1;scene_.carry=false;
+  scene_.maWorking=true;emp.bubble='...';emp.bcol='#f8f4e8';scene_.handedOver=true;
 }
 async function empEnters(){
   if(emp.vis&&emp.sit)return;
@@ -367,12 +377,42 @@ const seen={lines:null,ev:new Set()};
 const WORDS=s=>s.split(/\s+/);
 function eventScene(k){
   const t=WORDS(k),kind=t[0],code=t[2]||'',msg=k.split(code)[1]?.trim()||'';
-  if(code==='MA_CAMPAIGN_APPLIED')scene(empSeesFile);
+  if(code==='MA_CAMPAIGN_APPLIED'){if(scene_.handedOver)scene_.handedOver=false;else scene(empSeesFile)}
   else if(code==='MA_PASS_STARTED')scene(async()=>{if(!(emp.vis&&emp.sit)){await empEnters()}scene_.maWorking=true;emp.bubble='...';await say('EMPLOYEE','A new pass has started. I am working on the leadgen file.')});
   else if(kind==='blocker'){if(!scene_.maAlert){scene_.maAlert=true;scene(()=>empBlocker(msg))}}  // a repeated blocker is the same blocker
   else if(kind==='resolved'&&code!=='MA_CAMPAIGN_REJECTED'&&scene_.maAlert)scene(()=>empFixed('Fixed: '+msg));
   else if(code==='MA_PASS_FINISHED'&&/finished$/.test(msg))scene(()=>empDone());
   else if(code==='MA_PASS_FINISHED')scene(()=>say('EMPLOYEE',msg+'.'));
+}
+// Requests that come from outside this window (the dashboard, the CA's own automatic start): the manager says so, so the office
+// shows the work as it happens and not only what is typed in here. The ones sent from this window are narrated by its own flow.
+const JOBS={seen:null,ours:new Set(['ceo-window','dev-client'])};
+const JOB_WHAT={interpret:'a new campaign',answer:'answers to my questions',edit:'a change',approve:'an approval',discard:'a rejection',rollback:'a rollback',deactivate:'a switch-off',suggestion:'a suggestion'};
+function watchJobs(d){
+  const jobs=d.jobs||[];
+  if(JOBS.seen===null){JOBS.seen=new Map(jobs.map(j=>[j.id,j.status]));return}   // the first look: what is already there is not news
+  [...jobs].reverse().forEach(j=>{                                                // oldest first
+    const was=JOBS.seen.get(j.id);JOBS.seen.set(j.id,j.status);
+    if(SIM.on||VERIFYING.on||JOBS.ours.has(j.by)||was===j.status)return;
+    const what=JOB_WHAT[j.type]||j.type,name=j.name?' "'+j.name+'"':'';
+    const who=String(j.by||'').startsWith('campaign-agent')?'the dashboard':String(j.by||'someone').split('@')[0];
+    if(was===undefined&&(j.status==='pending'||j.status==='processing'||j.age_s<180)){      // something just arrived
+      if(j.type==='interpret')scene(()=>ceoBrief('New campaign'+(j.name?': '+j.name:'')+'. Sent from the dashboard by '+who+'.'));   // the CEO walks in
+      else if(j.type==='approve')scene(()=>say('CEO','Approved'+name+'. Run it.'));
+      else if(j.type==='deactivate'||j.type==='discard')scene(()=>say('CEO','Switch'+name+' off.'));
+      else scene(async()=>{mgr.bubble='mail!';mgr.bcol='#ffd84a';await say('MANAGER','A letter from the dashboard: '+what+name+', from '+who+'.')});
+    }
+    if(j.status==='processing'&&was!=='processing'&&['interpret','answer','edit','suggestion'].includes(j.type))scene(managerStartsWriting);
+    if(j.status==='done'&&was!=='done'){
+      scene_.thinking=false;
+      if(j.type==='approve'&&j.state==='PUBLISHED')scene(deliver);                          // the manager calls the Marketing Agent
+      else if(j.type==='deactivate'||j.type==='discard')scene(async()=>{scene_.fileOnDesk=false;mgr.bubble='';await say('MANAGER','Done: '+(j.type==='deactivate'?'switched off, and I told the Marketing Agent to stop.':'closed.'))});
+      else if(j.state==='CLARIFICATION_REQUIRED')scene(async()=>{mgr.bubble='?';mgr.bcol='#ffd84a';await say('MANAGER','I have questions'+name+'. Please answer them in the dashboard.')});
+      else if(j.state==='AWAITING_REVIEW')scene(async()=>{mgr.bubble='';scene_.fileOnDesk=true;await say('MANAGER','The leadgen file'+name+' is ready. Please review it and approve or change it in the dashboard.')});
+      else scene(async()=>{mgr.bubble='';await say('MANAGER','Finished '+what+name+'.'+(j.state==='VALIDATION_FAILED'?' The checks failed: see the dashboard.':''))});
+    }
+    if(j.status==='failed'&&was!=='failed'){scene_.thinking=false;scene(()=>say('MANAGER','Something went wrong with '+what+name+': '+(j.error||'unknown')+'. It can be sent again.'))}
+  });
 }
 function narrate(d){
   if(!seen.lines){
@@ -409,7 +449,7 @@ const VERIFYING={on:false};
 async function poll(){
   if(RESUME.promise&&!seen.lines){await RESUME.promise.catch(()=>{})}   // the first greeting must know whether we resumed
   try{data=await api('/api/state');
-    if(!SIM.on){readState();narrate(data);const p=await api('/api/pipeline').catch(()=>null);if(p){announcePipeline(p.pipeline);F.pipe=p.pipeline}}
+    if(!SIM.on){readState();narrate(data);watchJobs(data);const p=await api('/api/pipeline').catch(()=>null);if(p){announcePipeline(p.pipeline);F.pipe=p.pipeline}}
     $('reqs').textContent=data.requests.length?data.requests.join('\n'):'none';$('evs').textContent=data.events.length?data.events.join('\n'):'none';
     $('panel').innerHTML='';data.lines.forEach(l=>{const r=el('div','','row');r.appendChild(el('span','','dot '+l.state));r.appendChild(el('span',l.name,'nm'));r.appendChild(el('span',l.detail,'dt'));$('panel').appendChild(r)});
   }catch(e){if(!SIM.on&&!seen.lost){seen.lost=true;say('MANAGER','I lost the phone line to this window. The Campaign Agent on this machine is not answering.')}}
@@ -425,7 +465,7 @@ async function playDemo(){
   await scene(managerAsks);await scene(()=>say('CEO','Automotive and industrial automation. Embedded Linux and Yocto.'));
   await scene(managerStartsWriting);await sleep(2000);
   await scene(fileReady);await scene(()=>say('CEO','Approved.'));
-  await scene(deliver);await scene(empSeesFile);await sleep(2500);
+  await scene(deliver);await sleep(2500);
   await scene(()=>empBlocker('Chrome did not start on my desktop.'));await sleep(1500);
   await scene(()=>empFixed('Chrome is back. Continuing.'));await sleep(2500);
   await scene(()=>empDone('Task complete, boss. 6 new leads found.'));
