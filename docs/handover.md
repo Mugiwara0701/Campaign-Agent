@@ -131,6 +131,7 @@ allow-list (`ca_dashboard_user`). Turn off public sign-ups in Supabase Auth firs
 `ca_request_state_signed_in(p_state)`, which uses the signed-in email.
 
 ## What is not available yet
+
 - Campaign fields the Marketing Agent does not support (US-only, company size, preferred roles): the agent stores them,
   reports them under `not_applied`, and does not emit them.
 - Several campaigns live at once.

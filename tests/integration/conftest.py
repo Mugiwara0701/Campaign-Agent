@@ -66,6 +66,11 @@ def db(pg_url: str) -> Iterator[Database]:
     with psycopg.connect(pg_url, autocommit=True) as conn:
         conn.execute("truncate public.campaign cascade")
         conn.execute("truncate public.ca_heartbeat")
+        conn.execute("truncate public.ma_event")
+        conn.execute(
+            "update public.ca_control set desired_state = 'running', actual_state = 'running', "
+            "requested_by = null, requested_at = null"
+        )
         conn.execute("truncate public.emails")
     database = Database(pg_url)
     yield database

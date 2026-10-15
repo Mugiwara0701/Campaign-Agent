@@ -201,6 +201,7 @@ def test_a_closed_blocker_leaves_the_view(db) -> None:  # type: ignore[no-untype
 def as_role(pg_url: str, role: str):  # type: ignore[no-untyped-def]
     conn = psycopg.connect(pg_url)
     conn.execute(f"set role {role}")
+    conn.commit()  # a SET inside a transaction that is rolled back disappears: keep the role through the tests' rollbacks
     return conn
 
 

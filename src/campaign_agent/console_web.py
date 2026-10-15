@@ -184,8 +184,9 @@ def create_app(db: Database, settings: Settings, port: int) -> FastAPI:
 
     @app.post("/api/campaigns/{campaign_id}/approve")
     def campaign_approve(
-        campaign_id: str, body: dict[str, Any] = Body(default={})
-    ) -> dict[str, bool]:  # noqa: B008
+        campaign_id: str,
+        body: dict[str, Any] = Body(default={}),  # noqa: B008
+    ) -> dict[str, bool]:
         guarded(
             console_flow.approve, campaign_id, bool(body.get("start_pipeline", False)), admin=True
         )
@@ -228,7 +229,7 @@ def server_is_up(port: int) -> bool:
 
 def window_is_open(url: str, run: Any = subprocess.run) -> bool:
     """Is a Chromium app window for this address already open? (Chromium opens one more window per launch.)"""
-    return (
+    return bool(
         run(["pgrep", "-f", "--", f"--app={url}"], capture_output=True, check=False).returncode == 0
     )
 
@@ -275,11 +276,11 @@ def run_ui(
         url = f"http://{HOST}:{port}/"
         print(f"The Campaign Agent window is already running: {url}")
         if open_window and not window_is_open(url) and (browser := find_chromium()):
-            subprocess.Popen(
+            subprocess.Popen(  # noqa: S603
                 window_command(browser, url, fullscreen=fullscreen),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-            )  # noqa: S603
+            )
         db.close()
         return 0
     server = uvicorn.Server(

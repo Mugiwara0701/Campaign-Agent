@@ -9,6 +9,7 @@ import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any, cast
 
 import httpx
 import psycopg
@@ -39,6 +40,11 @@ class Snapshot:
     lines: tuple[Line, ...]
     requests: tuple[str, ...]
     events: tuple[str, ...]
+
+
+def _num(value: object) -> float:
+    """A number the database returned (a Decimal for an interval in seconds) as a float."""
+    return float(cast("Any", value))
 
 
 def _ago(seconds: float | None) -> str:
@@ -153,8 +159,8 @@ def _campaign(conn: Conn) -> Line:
     return Line(
         "Live campaign",
         OK,
-        f"version {r['version_no']}, approved by {r['approved_by']} {_ago(float(r['age']))}",
-    )  # type: ignore[arg-type]
+        f"version {r['version_no']}, approved by {r['approved_by']} {_ago(_num(r['age']))}",
+    )
 
 
 def _link(settings: Settings) -> Line:
@@ -214,9 +220,10 @@ def _marketing_agent(conn: Conn) -> tuple[Line, tuple[str, ...]]:
         "where code in ('MA_PASS_STARTED', 'MA_PASS_FINISHED', 'MA_STEP') and occurred_at > now() - interval '3 hours' "
         "order by occurred_at desc limit 1",
     )
+    last = running[0] if running else None
     working = (
-        f"running a pass ({running[0]['message'].removeprefix('Step: ')}, {_ago(float(running[0]['age']))})"  # type: ignore[union-attr, arg-type]
-        if running and running[0]["code"] != "MA_PASS_FINISHED"
+        f"running a pass ({str(last['message']).removeprefix('Step: ')}, {_ago(_num(last['age']))})"
+        if last is not None and last["code"] != "MA_PASS_FINISHED"
         else None
     )
     counted = _query(

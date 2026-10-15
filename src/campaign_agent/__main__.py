@@ -119,11 +119,11 @@ def _api(settings: Settings) -> int:
     app = create_app(Gateway(settings.api_database_url.get_secret_value()), token=token)
     uvicorn.run(
         app,
-        host="0.0.0.0",
+        host="0.0.0.0",  # noqa: S104
         port=int(os.environ.get("PORT", "8000")),
         log_level="warning",
         access_log=False,
-    )  # noqa: S104
+    )
     return 0
 
 

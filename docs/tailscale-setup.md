@@ -231,7 +231,7 @@ see the troubleshooting table.
 | Machine is in the console without a tag | It joined without a tagged key. Remove it from the console, `sudo tailscale logout`, and join again with the key |
 | `tailscale status` says `Stopped` or `Logged out` | `sudo systemctl start tailscaled`, then `sudo tailscale up` again with a new key if needed |
 | Name does not resolve | MagicDNS is off (section 1), or the machine ignores it: `tailscale up --accept-dns=true` (the default). Use the full `.ts.net` name |
-| `tailscale ping` works but `curl` times out | The access rules, the `ufw` rule, or the listener is not running or is bound to the wrong address. Check the console's access preview, `sudo ufw status`, and `ss -ltn | grep 8787` on the CA machine |
+| `tailscale ping` works but `curl` times out | The access rules, the `ufw` rule, or the listener is not running or is bound to the wrong address. Check the console's access preview, `sudo ufw status`, and `ss -ltn \| grep 8787` on the CA machine |
 | `tailscale ping` shows `via DERP(...)` and never `direct` | The path goes through Tailscale's relay. It works, only slower. Usually fine inside one office; check that the router does not isolate wireless clients |
 | Works, then stops after months | Key expiry. Disable it for both machines (sections 4 and 5) and re-join with a new key |
 | Service account cannot run `tailscale ip -4` | Use `ip -4 addr show tailscale0`, as noted in section 4 step 6 |

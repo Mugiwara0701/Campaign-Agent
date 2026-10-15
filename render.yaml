@@ -11,7 +11,7 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.7
-      # The limited campaign_dashboard login (python -m campaign_agent dashboard-password prints its shape). Never the owner's.
+      # The limited campaign_dashboard login (see docs/dashboard-api.md). Never the owner's.
       - key: API_DATABASE_URL
         sync: false
       # A long random secret (32+ characters) shared with the dashboard's server, nobody else.

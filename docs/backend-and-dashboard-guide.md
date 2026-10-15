@@ -83,35 +83,41 @@ Render yet.
 The gateway is optional (the dashboard can write the database itself), but this is the way to give the dashboard plain HTTPS
 calls. It is a small Python web service from this repository.
 
-**Before Render**
+### Before Render
+
 1. **Apply migration 0022:** `bash deploy/remote.sh migrate --plan`, then `bash deploy/remote.sh agent migrate --yes`.
 2. **Give the limited dashboard role a login:** `bash deploy/remote.sh agent dashboard-password`. It asks for a password
    (20 to 100 characters from `A-Z a-z 0-9 . _ ~ -`, not shown) and prints the `API_DATABASE_URL` shape:
    `postgresql://campaign_dashboard.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres`.
    Use Supabase's **pooler** address (port 6543). Render cannot reach the direct database address.
 3. **Make a token:** `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`. This is `API_TOKEN`. Keep it secret.
-4. **Get the code on GitHub:** it is pushed to branch `feature/ma-link`. Merge it to `main` (a pull request), or choose that
-   branch in step 6.
+4. **Get the code onto the branch Render will use.** It is pushed to `feature/ma-link`. Either merge it to `main` (a pull
+   request), or choose that branch when you create the Blueprint below.
 
-**On Render**
-5. Sign in at render.com, connect your GitHub, and allow it to read the `Campaign-Agent` repository.
-6. **New > Blueprint**, choose the repository (and the branch). Render reads `render.yaml`: a free web service named
+### On Render
+
+1. Sign in at render.com, connect your GitHub, and allow it to read the `Campaign-Agent` repository.
+2. **New > Blueprint**, choose the repository (and the branch). Render reads `render.yaml`: a free web service named
    `campaign-agent-gateway`, build `pip install .`, start `python -m campaign_agent api`, health check `/health`, Python 3.12.7.
-7. Render asks for the two secrets. Paste `API_DATABASE_URL` (step 2) and `API_TOKEN` (step 3). Click **Apply**.
-8. Wait for the first deploy (a few minutes). Render shows a URL like `https://campaign-agent-gateway.onrender.com`.
+3. Render asks for the two secrets. Paste `API_DATABASE_URL` (from "Before Render", step 2) and `API_TOKEN` (step 3).
+   Click **Apply**.
+4. Wait for the first deploy (a few minutes). Render shows a URL like `https://campaign-agent-gateway.onrender.com`.
 
-**Check it works**
-9. `curl https://<your-service>.onrender.com/health` returns `{"status":"ok"}`.
-10. `curl -H "Authorization: Bearer <API_TOKEN>" https://<your-service>.onrender.com/v1/ca` shows `"online": true` when the CA
-    is running on the office machine. Without the header it returns 401.
-11. If it returns 503 "a migration is missing", migration 0022 or the login in step 2 was not done; if it cannot start, open
-    the Render logs: it prints that `API_DATABASE_URL` and `API_TOKEN` must be set.
+### Check that it works
 
-**Give it to the dashboard**
-12. In the dashboard's **server** environment set `CA_GATEWAY_URL` (the Render address) and `CA_GATEWAY_TOKEN` (the same token).
-    Never in browser code.
+1. `curl https://<your-service>.onrender.com/health` returns `{"status":"ok"}`.
+2. `curl -H "Authorization: Bearer <API_TOKEN>" https://<your-service>.onrender.com/v1/ca` shows `"online": true` when the CA
+   is running on the office machine. Without the header it returns 401.
+3. If it returns 503 "a migration is missing", migration 0022 or the login ("Before Render", step 2) was not done. If it does not
+   start, open the Render logs: it prints that `API_DATABASE_URL` and `API_TOKEN` must be set.
 
-**Know this**
+### Give it to the dashboard
+
+1. In the dashboard's **server** environment set `CA_GATEWAY_URL` (the Render address) and `CA_GATEWAY_TOKEN` (the same token).
+   Never in browser code.
+
+### Know this
+
 - Render's **free plan sleeps** after about 15 minutes without a call; the next call takes 30 to 60 seconds. The dashboard's
   server should allow that wait, or use a paid plan.
 - To change the token: change it in Render and in the dashboard's server together.
