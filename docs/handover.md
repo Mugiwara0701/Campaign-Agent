@@ -1,6 +1,7 @@
 # Handover: connecting the dashboard to the Campaign Agent
 
-> **Start with [dashboard-integration.md](dashboard-integration.md)**: the final guide (what to build, how, and what not to do).
+> **Overview of everything: [backend-and-dashboard-guide.md](backend-and-dashboard-guide.md).**
+> **Then [dashboard-integration.md](dashboard-integration.md)**: the final guide (what to build, how, and what not to do).
 > The dashboard no longer controls the Marketing Agent's pipeline: the Campaign Agent runs it. This page is the detail.
 
 For the dashboard developer. The Campaign Agent (CA) has **no HTTP API**. You talk to it through three tables in the
