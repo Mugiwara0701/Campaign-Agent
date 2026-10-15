@@ -251,6 +251,7 @@ is the same request, so a retry or a double click never makes two.
   started again so it takes the new file). `false` or missing only publishes. We want **`true`**: approving means "run this campaign".
   After it finishes, `last_request.result.pipeline` says what happened (`asked`, `restarted`, or a `reason`). The campaign is live either way.
 - Only one campaign is live at a time. Approving another replaces it; the old one keeps its versions and can come back with `rollback`.
+- **Switching a campaign off (`deactivate`) also stops the MA** (the pass in progress is cancelled). It does not stop on its own otherwise: with no campaign live the MA would fall back to its own default settings. Pressing it again when nothing is live still stops a running MA. To run the campaign again, approve it again with `start_pipeline: true` (or use rollback to make an older version live, then start it).
 
 **Errors to handle** (`last_request.error_code`):
 

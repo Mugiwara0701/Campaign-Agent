@@ -132,7 +132,7 @@ function cable(state,t,busy){
 // ---------------- what the real world says ----------------
 const S={paused:false,worker:'off',model:'off',db:'off',link:'off',ma:'off',waiting:0,running:0,blockers:0,maWorking:false};
 const F={id:null,notes:[],state:'NEW',busy:false,live:false,q:[],cand:null,failed:null,shown:'',yaml:false,pipe:null};
-const scene_={thinking:false,fileOnDesk:false,token:null,maWorking:false,maAlert:false,maOffer:false};
+const scene_={thinking:false,fileOnDesk:false,token:null,maWorking:false,maAlert:false,maOffer:false,carry:false,handedOver:false};
 function readState(){
   const g=n=>{const l=data.lines.find(x=>x.name===n);return l?l.state:'off'};
   S.worker=g('Worker');S.paused=!!data.lines.find(x=>x.name==='Worker'&&/^paused/.test(x.detail));S.model=g('Model server');S.db=g('Database');S.link=g('Link to MA');S.ma=g('Marketing Agent');
@@ -160,6 +160,7 @@ function draw(){
   cable(sim?'ok':S.link,t,scene_.maWorking||!!scene_.token);
   c.fillStyle='#f8f4e8';c.fillText('TAILSCALE',134,184);
   if(scene_.token){const p=cablePt(scene_.token.d);R(p[0]-6,p[1]-8,13,16,'#fff');R(p[0]-4,p[1]-5,9,1,'#3b6fd6');R(p[0]-4,p[1]-2,7,1,'#3b6fd6');R(p[0]-4,p[1]+1,9,1,'#3b6fd6');c.fillStyle='#ffd84a';c.fillText('FILE',p[0]-8,p[1]-17)}
+  if(scene_.carry)paper(Math.round(emp.x)-20,Math.round(emp.y)-16,3,'#2f9e5b');
   [mgr,ceo,emp].forEach(step);
   person(emp,'#2f9e5b','#3b2a1a',null,{work:scene_.maWorking&&emp.sit,sad:scene_.maAlert});
   person(mgr,'#2b5fbf','#171717','#e0443e',{work:!mgrAsleep&&(mgr.sit),sleep:mgrAsleep});
@@ -201,12 +202,19 @@ async function ceoBrief(text){
 async function managerStartsWriting(){scene_.thinking=true;mgr.bubble='...';mgr.bcol='#f8f4e8';await say('MANAGER','Reading the request... (my model runs on this machine, it can take a few minutes)')}
 async function managerAsks(){scene_.thinking=false;mgr.bubble='?';mgr.bcol='#ffd84a';await say('MANAGER','CEO, I have questions. I cannot write the file without your answers.')}
 async function fileReady(){scene_.thinking=false;scene_.fileOnDesk=true;mgr.bubble='';await say('MANAGER','The leadgen file is ready, sir. Please read it and approve it below. Nothing is sent until you do.')}
+// The approval: the manager calls the Marketing Agent into his office, hands over the leadgen file, and the Marketing Agent
+// walks back to its own room and sits down to work. Used for an approval from this window and from the dashboard.
 async function deliver(){
-  scene_.fileOnDesk=false;mgr.bubble='';await say('MANAGER','Approved. The file is live. Calling the Marketing Agent now...');
-  mgr.bubble='tel';mgr.bcol='#cfe8ff';scene_.token={d:0};
-  while(scene_.token.d<CLEN){scene_.token.d+=2.2;await sleep(16)}
-  scene_.token=null;mgr.bubble='';
-  await say('CABLE','The leadgen file reached the Marketing Floor.');
+  scene_.fileOnDesk=false;mgr.bubble='tel';mgr.bcol='#cfe8ff';
+  await say('MANAGER','Approved. The leadgen file is live. Marketing Agent, please come to my office.');
+  mgr.bubble='';scene_.maAlert=false;
+  if(!emp.vis){emp.vis=true;emp.x=352;emp.y=130;emp.sit=false;emp.face=-1;emp.bubble='';scene_.maWorking=false;await go(emp,[[300,130],[252,128],[96,128],TALK_E])}
+  else{emp.bubble='';scene_.maWorking=false;await go(emp,TO_MGR_E)}
+  emp.face=-1;mgr.face=1;emp.bubble='ok';emp.bcol='#d6ffd6';
+  scene_.fileOnDesk=true;await sleep(700);scene_.fileOnDesk=false;scene_.carry=true;            // the file changes hands
+  await say('EMPLOYEE','Got the leadgen file, boss. Back to my room, and I start the work.');
+  await go(emp,[[96,128],[252,128],SEAT_E]);emp.sit=true;emp.face=-1;scene_.carry=false;
+  scene_.maWorking=true;emp.bubble='...';emp.bcol='#f8f4e8';scene_.handedOver=true;
 }
 async function empEnters(){
   if(emp.vis&&emp.sit)return;
@@ -369,7 +377,7 @@ const seen={lines:null,ev:new Set()};
 const WORDS=s=>s.split(/\s+/);
 function eventScene(k){
   const t=WORDS(k),kind=t[0],code=t[2]||'',msg=k.split(code)[1]?.trim()||'';
-  if(code==='MA_CAMPAIGN_APPLIED')scene(empSeesFile);
+  if(code==='MA_CAMPAIGN_APPLIED'){if(scene_.handedOver)scene_.handedOver=false;else scene(empSeesFile)}
   else if(code==='MA_PASS_STARTED')scene(async()=>{if(!(emp.vis&&emp.sit)){await empEnters()}scene_.maWorking=true;emp.bubble='...';await say('EMPLOYEE','A new pass has started. I am working on the leadgen file.')});
   else if(kind==='blocker'){if(!scene_.maAlert){scene_.maAlert=true;scene(()=>empBlocker(msg))}}  // a repeated blocker is the same blocker
   else if(kind==='resolved'&&code!=='MA_CAMPAIGN_REJECTED'&&scene_.maAlert)scene(()=>empFixed('Fixed: '+msg));
@@ -387,18 +395,23 @@ function watchJobs(d){
     const was=JOBS.seen.get(j.id);JOBS.seen.set(j.id,j.status);
     if(SIM.on||VERIFYING.on||JOBS.ours.has(j.by)||was===j.status)return;
     const what=JOB_WHAT[j.type]||j.type,name=j.name?' "'+j.name+'"':'';
-    const who=String(j.by||'').startsWith('campaign-agent')?'the dashboard (I found it myself)':String(j.by||'someone').split('@')[0];
-    if(was===undefined&&(j.status==='pending'||j.status==='processing'||j.age_s<180)){
-      scene(async()=>{mgr.bubble='mail!';mgr.bcol='#ffd84a';await say('MANAGER','A letter from the dashboard: '+what+name+', sent by '+who+'. I am on it.')});
+    const who=String(j.by||'').startsWith('campaign-agent')?'the dashboard':String(j.by||'someone').split('@')[0];
+    if(was===undefined&&(j.status==='pending'||j.status==='processing'||j.age_s<180)){      // something just arrived
+      if(j.type==='interpret')scene(()=>ceoBrief('New campaign'+(j.name?': '+j.name:'')+'. Sent from the dashboard by '+who+'.'));   // the CEO walks in
+      else if(j.type==='approve')scene(()=>say('CEO','Approved'+name+'. Run it.'));
+      else if(j.type==='deactivate'||j.type==='discard')scene(()=>say('CEO','Switch'+name+' off.'));
+      else scene(async()=>{mgr.bubble='mail!';mgr.bcol='#ffd84a';await say('MANAGER','A letter from the dashboard: '+what+name+', from '+who+'.')});
     }
-    if(j.status==='processing'&&was!=='processing')scene(()=>say('MANAGER','Reading '+what+name+' now. My model runs on this machine, so it takes a few minutes.'));
+    if(j.status==='processing'&&was!=='processing'&&['interpret','answer','edit','suggestion'].includes(j.type))scene(managerStartsWriting);
     if(j.status==='done'&&was!=='done'){
-      const next={AWAITING_REVIEW:'The leadgen file is ready. Please review it and approve or change it in the dashboard.',
-        CLARIFICATION_REQUIRED:'I need answers to my questions. Please answer them in the dashboard.',
-        PUBLISHED:'It is live now.',VALIDATION_FAILED:'The checks failed. Please look at them in the dashboard.'}[j.state];
-      scene(async()=>{mgr.bubble='';scene_.fileOnDesk=j.state==='AWAITING_REVIEW';await say('MANAGER','Finished '+what+name+'. '+(next||''))});
+      scene_.thinking=false;
+      if(j.type==='approve'&&j.state==='PUBLISHED')scene(deliver);                          // the manager calls the Marketing Agent
+      else if(j.type==='deactivate'||j.type==='discard')scene(async()=>{scene_.fileOnDesk=false;mgr.bubble='';await say('MANAGER','Done: '+(j.type==='deactivate'?'switched off, and I told the Marketing Agent to stop.':'closed.'))});
+      else if(j.state==='CLARIFICATION_REQUIRED')scene(async()=>{mgr.bubble='?';mgr.bcol='#ffd84a';await say('MANAGER','I have questions'+name+'. Please answer them in the dashboard.')});
+      else if(j.state==='AWAITING_REVIEW')scene(async()=>{mgr.bubble='';scene_.fileOnDesk=true;await say('MANAGER','The leadgen file'+name+' is ready. Please review it and approve or change it in the dashboard.')});
+      else scene(async()=>{mgr.bubble='';await say('MANAGER','Finished '+what+name+'.'+(j.state==='VALIDATION_FAILED'?' The checks failed: see the dashboard.':''))});
     }
-    if(j.status==='failed'&&was!=='failed')scene(()=>say('MANAGER','Something went wrong with '+what+name+': '+(j.error||'unknown')+'. It can be sent again.'));
+    if(j.status==='failed'&&was!=='failed'){scene_.thinking=false;scene(()=>say('MANAGER','Something went wrong with '+what+name+': '+(j.error||'unknown')+'. It can be sent again.'))}
   });
 }
 function narrate(d){
@@ -452,7 +465,7 @@ async function playDemo(){
   await scene(managerAsks);await scene(()=>say('CEO','Automotive and industrial automation. Embedded Linux and Yocto.'));
   await scene(managerStartsWriting);await sleep(2000);
   await scene(fileReady);await scene(()=>say('CEO','Approved.'));
-  await scene(deliver);await scene(empSeesFile);await sleep(2500);
+  await scene(deliver);await sleep(2500);
   await scene(()=>empBlocker('Chrome did not start on my desktop.'));await sleep(1500);
   await scene(()=>empFixed('Chrome is back. Continuing.'));await sleep(2500);
   await scene(()=>empDone('Task complete, boss. 6 new leads found.'));

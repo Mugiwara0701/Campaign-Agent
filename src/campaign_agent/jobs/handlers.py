@@ -101,12 +101,14 @@ class Services:
 class Action:
     """A change to what is live. Done by the database functions, in the same transaction as the state."""
 
-    kind: Literal["publish", "activate", "deactivate", "start_pipeline"]
+    kind: Literal["publish", "activate", "deactivate", "start_pipeline", "stop_pipeline"]
     version_no: int | None = None
     sha256: str | None = None
     approver: str = ""
     # After the publish is committed, also start (or restart) the Marketing Agent's pipeline, as asked in the approval.
     start_pipeline: bool = False
+    # After the change is committed, stop the Marketing Agent's pipeline: a campaign that is switched off must not keep working.
+    stop_pipeline: bool = False
 
 
 @dataclass
@@ -470,9 +472,12 @@ def _deactivate(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
     t.conv = ws.conv
     t.extra = {"live_version": None}
     if any(v.live for v in ws.versions):
-        t.action = Action("deactivate")
+        t.action = Action("deactivate", stop_pipeline=True)
     else:
         t.extra["already"] = True
+        # Nothing was live, but the Marketing Agent may still be running (it falls back to its own settings): switching
+        # off again stops it.
+        t.action = Action("stop_pipeline", stop_pipeline=True)
 
 
 _HANDLERS = {

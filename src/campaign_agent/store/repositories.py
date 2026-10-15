@@ -449,7 +449,11 @@ def pipeline_state(conn: Conn) -> dict[str, Any] | None:
             row = conn.execute(
                 "select desired_state, actual_state from public.pipeline_control where id = 1"
             ).fetchone()
-    except (psycopg.errors.UndefinedTable, psycopg.errors.InsufficientPrivilege):
+    except (
+        psycopg.errors.UndefinedTable,
+        psycopg.errors.UndefinedColumn,
+        psycopg.errors.InsufficientPrivilege,
+    ):
         return None
     return dict(row) if row else None
 

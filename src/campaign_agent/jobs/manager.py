@@ -235,7 +235,7 @@ def _run_action(conn: Conn, req: Request, action: Action) -> list[str]:
     elif action.kind == "activate":
         assert action.version_no is not None  # noqa: S101
         done = repo.activate(conn, req.campaign_id, action.version_no)
-    elif action.kind == "start_pipeline":
+    elif action.kind in ("start_pipeline", "stop_pipeline"):
         return []  # nothing to change in the store: the pipeline is asked for after the commit
     else:
         repo.deactivate(conn, req.campaign_id)
@@ -286,6 +286,21 @@ def start_marketing_agent(
     with db.transaction() as conn:
         asked = repo.request_pipeline(conn, "running", by)
     return {"asked": asked, "restarted": restarted, **({} if asked else {"reason": "not_allowed"})}
+
+
+def stop_marketing_agent(db: Database, requester: str) -> dict[str, Any]:
+    """After a campaign was switched off: stop the Marketing Agent's pipeline (the pass in progress is cancelled).
+    Never raises into the caller's request: the change is committed either way, and the answer says what happened."""
+    by = f"switched off by {requester}"[:200]
+    with db.transaction() as conn:
+        state = repo.pipeline_state(conn)
+    if state is None:
+        return {"asked": False, "reason": "pipeline_not_readable"}
+    if "running" not in (state["desired_state"], state["actual_state"]):
+        return {"asked": False, "already_stopped": True}
+    with db.transaction() as conn:
+        asked = repo.request_pipeline(conn, "stopped", by)
+    return {"asked": asked, **({} if asked else {"reason": "not_allowed"})}
 
 
 def _refresh_superseded(conn: Conn, campaign_ids: list[str]) -> None:
@@ -356,18 +371,27 @@ def process_next(db: Database, svc: Services, cfg: ManagerConfig) -> bool:
         else:
             log.warning("request released", extra={**context, "status": status})
         return True
-    if outcome.error is None and outcome.action is not None and outcome.action.start_pipeline:
+    action = outcome.action
+    if (
+        outcome.error is None
+        and action is not None
+        and (action.start_pipeline or action.stop_pipeline)
+    ):
         try:
-            note = start_marketing_agent(db, req.requested_by)
+            note = (
+                start_marketing_agent(db, req.requested_by)
+                if action.start_pipeline
+                else stop_marketing_agent(db, req.requested_by)
+            )
         except Exception:
-            log.exception("could not ask for the pipeline to start", extra=context)
+            log.exception("could not ask for the pipeline to start or stop", extra=context)
             note = {"asked": False, "reason": "error"}
         try:
             with db.transaction() as conn:
                 repo.merge_request_result(conn, req.id, {"pipeline": note})
         except Exception:
             log.exception("could not record the pipeline request", extra=context)
-        log.info("pipeline requested after approval", extra={**context, **note})
+        log.info("pipeline requested after the change", extra={**context, **note})
     code = outcome.error.code.value if outcome.error else None
     log.info("request finished", extra={**context, "state": outcome.conv.state.value, "code": code})
     return True
