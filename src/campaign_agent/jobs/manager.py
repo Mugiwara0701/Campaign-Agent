@@ -294,6 +294,9 @@ def stop_marketing_agent(db: Database, requester: str) -> dict[str, Any]:
     by = f"switched off by {requester}"[:200]
     with db.transaction() as conn:
         state = repo.pipeline_state(conn)
+        other_live = repo.live_version_for_ma(conn) is not None
+    if other_live:  # switching off one campaign must not stop the work of the one that is live
+        return {"asked": False, "reason": "another_campaign_is_live"}
     if state is None:
         return {"asked": False, "reason": "pipeline_not_readable"}
     if "running" not in (state["desired_state"], state["actual_state"]):
