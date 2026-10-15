@@ -45,7 +45,7 @@ POST /v1/campaigns/6f1d3a52-0b0e-4f6e-8c52-1f1d9f0f9a11/requests
   "request_type": "interpret",
   "payload": {},
   "requested_by": "priya@example.com",
-  "idempotency_key": "interpret-6f1d3a52"
+  "idempotency_key": "interpret-1"
 }
 ```
 
