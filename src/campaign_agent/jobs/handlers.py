@@ -447,7 +447,12 @@ def _refuse_unloadable_contract(svc: Services, contract_version: str) -> None:
 
 
 def _rollback(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
-    """Make a version that was approved before live again. Does not change the conversation."""
+    """Make a version that was approved before live again. Does not change the conversation. Like an approval it also
+    starts the Marketing Agent on it ("Make live" after a switch-off must bring the work back); `start_pipeline: false`
+    only makes it live."""
+    start_pipeline = req.payload.get("start_pipeline", True)
+    if not isinstance(start_pipeline, bool):
+        raise _fail(ErrorCode.INVALID_REQUEST, "start_pipeline must be true or false")
     version = req.payload.get("version")
     if not isinstance(version, int) or isinstance(version, bool):
         raise _fail(ErrorCode.INVALID_REQUEST, "send version (a number)")
@@ -464,7 +469,7 @@ def _rollback(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
     if match.live:
         t.extra["already"] = True
     else:
-        t.action = Action("activate", version)
+        t.action = Action("activate", version, start_pipeline=start_pipeline)
 
 
 def _deactivate(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:

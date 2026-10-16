@@ -63,6 +63,7 @@ Each candidate also stores a snapshot of the campaign as it was (`ir_snapshot`).
   only takes a new campaign at its next pass, so it is stopped and started again (the stop must be seen first; it waits up
   to 90 seconds, then asks for "running" again anyway, so it is never left stopped). Approving again with the flag, for a
   campaign that is already live, starts it again, in case the first attempt failed. Any other value is `invalid_request`.
+- **`rollback` ("Make live") also starts the Marketing Agent** on the version it brings back, as an approval with `start_pipeline` does (default `true`; `false` only makes it live). So switch off, then Make live, brings the work back.
 - **`deactivate` also stops the Marketing Agent's pipeline**, after the change is committed (`result.pipeline`: `asked`, or `already_stopped`, or a `reason`). A campaign switched off must not keep working, and with nothing live the Marketing Agent would otherwise run its own defaults.
 - **The dashboard's `is_active` and start/end dates.** By default they are ignored: approval alone makes a version live.
   With `MA_LINK_RESPECT_SCHEDULE=true` the Marketing Agent is only given the live campaign while the campaign is switched on
