@@ -123,6 +123,25 @@ class MaEventView(_V):
     repeat_count: int = 1
 
 
+class BriefItemView(_V):
+    text: str
+    sources: tuple[str, ...]
+
+
+class BriefView(_V):
+    """The research brief on the version under review (research/brief.py): what the target customers look like, each
+    statement with the pages it comes from, and what could not be confirmed. Never names companies."""
+
+    for_sha256: str  # the version it was written for; a new version gets a new brief
+    status: Literal["ready", "partial", "unavailable"]
+    company_types: tuple[BriefItemView, ...] = ()
+    buying_signals: tuple[BriefItemView, ...] = ()
+    key_terms: tuple[BriefItemView, ...] = ()
+    not_confirmed: tuple[str, ...] = ()
+    queries: tuple[str, ...] = ()
+    searched_at: str = ""
+
+
 class ReviewView(_V):
     campaign_id: str
     state: str
@@ -147,6 +166,8 @@ class ReviewView(_V):
     versions: tuple[VersionView, ...] = ()
     # Open blockers the Marketing Agent reported, and the last applied or rejected events of the live campaign.
     ma_events: tuple[MaEventView, ...] = ()
+    # The research brief on the candidate (None: research is off, or there is no validated version yet).
+    brief: BriefView | None = None
 
     def with_candidate_version(self, version: int) -> "ReviewView":
         assert self.candidate is not None  # noqa: S101

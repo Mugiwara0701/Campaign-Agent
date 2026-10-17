@@ -194,7 +194,7 @@ def _serve(command: str, settings: Settings) -> int:
     from campaign_agent.llm.adapter import GenParams
     from campaign_agent.logs import setup_logging
     from campaign_agent.ma_status import MaStatus, fetch_status
-    from campaign_agent.research.factory import build_researcher
+    from campaign_agent.research.factory import build_brief_writer, build_researcher
     from campaign_agent.store.db import Database
     from campaign_agent.validators.downstream import Downstream
 
@@ -232,6 +232,7 @@ def _serve(command: str, settings: Settings) -> int:
             downstream=downstream,
             ma_status=ma_status,
             researcher=build_researcher(settings, extractor_adapter),
+            brief_writer=build_brief_writer(settings, extractor_adapter),
         ),
         cfg,
         model_name=settings.llm_model,

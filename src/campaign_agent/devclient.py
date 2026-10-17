@@ -19,7 +19,7 @@ from typing import Any
 from campaign_agent.questions.models import Question
 from campaign_agent.store import repositories as repo
 from campaign_agent.store.db import Database
-from campaign_agent.view import ReviewView
+from campaign_agent.view import BriefView, ReviewView
 
 TEST_PREFIX = "[CA-TEST] "
 REQUESTED_BY = "dev-client"
@@ -40,6 +40,20 @@ def parse_answer(question: Question, raw: str) -> dict[str, Any]:
     return {"question_id": question.id, "value": raw}
 
 
+def format_brief(brief: BriefView) -> list[str]:
+    """The research brief: each statement with the pages it comes from, and what could not be confirmed."""
+    lines = [f"Research brief ({brief.status}, searched {brief.searched_at or '-'}):"]
+    for title, items in (
+        ("Company types", brief.company_types),
+        ("Buying signals", brief.buying_signals),
+        ("Key terms", brief.key_terms),
+    ):
+        for item in items:
+            lines.append(f"  - {title}: {item.text}   [{', '.join(item.sources)}]")
+    lines.extend(f"  - Not confirmed: {n}" for n in brief.not_confirmed)
+    return lines
+
+
 def format_view(view: ReviewView) -> list[str]:
     """The review as plain text, the way a person reads it."""
     lines = [f"State: {view.state}   revision {view.revision}   live: {view.live_version or 'no'}"]
@@ -57,6 +71,8 @@ def format_view(view: ReviewView) -> list[str]:
     if view.not_applied:
         lines.append("Could not be applied:")
         lines.extend(f"  - {n.request}: {n.reason}" for n in view.not_applied)
+    if view.brief is not None:
+        lines.extend(format_brief(view.brief))
     for notice in view.notices:
         lines.append(f"Notice: {notice.message}")
     lines.extend(f"Warning: {w}" for w in view.warnings)

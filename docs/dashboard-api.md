@@ -65,6 +65,13 @@ campaign, e.g. `{"leads": {"QUALIFIED": 4, "SENT": 1}, "emails": {"drafted": 2, 
 addresses. `null` until `migrations/repeatable/ma_campaign_progress.sql` could be applied (it needs the Marketing Agent's
 migration 0014).
 
+### The research brief
+
+With research on (`RESEARCH_ENABLED=true` on the CA machine), `review_view.brief` holds the research brief on the
+version under review: `status`, `company_types`, `buying_signals`, `key_terms` (each `{text, sources}`), `not_confirmed`,
+`for_sha256` (the version it belongs to), `queries`, `searched_at`. Show it next to the proposal, with its links; it is
+`null` when research is off or no version is ready. Details: [research.md](research.md#the-research-brief-on-a-proposal-researchbriefpy).
+
 ### Send a request
 
 ```json
