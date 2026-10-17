@@ -148,6 +148,8 @@ Negative cases:
 | CA | `cbcd50b` (this report, on top of the format fix) | **all checks pass**, secret scan included (run 39023386475) |
 | MA | `d3e7c82` | tests (with PostgreSQL), type check and security pass; one formatting line |
 | MA | `829d66e` (that line fixed) | **all checks pass**: ci 39023367598, lint 39023367614, security 39023367499 |
+| CA | `8b47795` (contact roles) | **all checks pass**, including the real MA accepting `preferred_roles` (run 39024096654) |
+| MA | `ad7b216` (Slack endpoint tests, shown-card binding, contact roles) | **all checks pass**: ci 39024330247 (Python, PostgreSQL), lint 39024330209 (ruff, mypy, Deno format, lint and tests), security 39024330311 |
 
 ## F. Remaining blockers
 
