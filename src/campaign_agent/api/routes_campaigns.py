@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from campaign_agent.api.schemas import RequestIn
 from campaign_agent.api.service import Gateway
@@ -32,9 +32,16 @@ def make_router(gateway: Gateway, guard: Any, user_of: Any = lambda: None) -> AP
             body.idempotency_key,
         )
 
+    @router.get("")
+    def index(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:  # noqa: B008
+        """The newest campaigns that are not deleted, with their `workflow_status` (api/workflow.py)."""
+        return {"campaigns": gateway.campaigns(limit)}
+
     @router.get("/{campaign_id}")
     def show(campaign_id: UUID) -> dict[str, Any]:
-        """What to put on the screen: the state, the revision, `review_view`, and the newest request."""
+        """What to put on the screen: the state, the `workflow_status` across both agents (and `error` when a person
+        must look), the revision, `review_view` (the proposal), the newest request, and `execution` (counts of the
+        Marketing Agent's leads and emails for this campaign; null until it reports any)."""
         return gateway.campaign(str(campaign_id))
 
     return router

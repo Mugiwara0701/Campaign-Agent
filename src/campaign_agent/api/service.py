@@ -11,9 +11,24 @@ from typing import Any
 import psycopg
 from psycopg.types.json import Jsonb
 
+from campaign_agent.api.workflow import workflow_status
 from campaign_agent.store.db import Database
 
 ONLINE_WITHIN_S = 60  # a heartbeat older than this means the Campaign Agent is not running
+MAX_LIST = 200
+
+
+def _progress(conn: Any, campaign_id: str) -> dict[str, Any] | None:
+    """Counts of the Marketing Agent's leads and emails for this campaign (migrations/repeatable/ma_campaign_progress.sql).
+    None until that function exists (inside a savepoint, so the caller's transaction survives)."""
+    try:
+        with conn.transaction():
+            row = conn.execute(
+                "select public.ca_campaign_progress(%s) as p", (campaign_id,)
+            ).fetchone()
+    except (psycopg.errors.UndefinedFunction, psycopg.errors.InsufficientPrivilege):
+        return None
+    return dict(row["p"]) if row and row["p"] is not None else None
 
 
 class NotFound(Exception):
@@ -108,13 +123,64 @@ class Gateway:
                 "from public.campaign_request where campaign_id = %s order by created_at desc limit 1",
                 (campaign_id,),
             ).fetchone()
+            current = state["current_state"] if state else "NEW"
+            view = state["review_view"] if state else None
+            progress = _progress(conn, campaign_id) if current == "PUBLISHED" else None
+            status, error = workflow_status(current, view, dict(last) if last else None, progress)
             return {
                 "campaign_id": campaign_id,
-                "state": state["current_state"] if state else "NEW",
+                "state": current,
+                "workflow_status": status,
+                "error": error,
                 "revision": state["revision"] if state else None,
-                "review_view": state["review_view"] if state else None,
+                "review_view": view,
                 "last_request": dict(last) if last else None,
+                "execution": progress,
             }
+
+        return self._run(work)  # type: ignore[no-any-return]
+
+    def campaigns(self, limit: int = 50) -> list[dict[str, Any]]:
+        """The newest campaigns that are not deleted, each with its workflow status (no review view: ask per campaign)."""
+
+        def work(conn: Any) -> list[dict[str, Any]]:
+            rows = conn.execute(
+                """
+                select c.id, c.campaign_name, c.is_active, c.start_date, c.end_date, s.current_state, s.review_view,
+                       s.updated_at,
+                       (select row_to_json(r) from (
+                            select q.request_type, q.status, q.error_detail from public.campaign_request as q
+                            where q.campaign_id = c.id order by q.created_at desc limit 1
+                        ) as r) as last_request
+                from public.campaign as c
+                left join public.campaign_state as s on s.campaign_id = c.id
+                where c.deleted_at is null
+                order by c.created_at desc
+                limit %s
+                """,
+                (max(1, min(limit, MAX_LIST)),),
+            ).fetchall()
+            out = []
+            for r in rows:
+                view = r["review_view"] or {}
+                status, error = workflow_status(
+                    r["current_state"] or "NEW", view, r["last_request"]
+                )
+                out.append(
+                    {
+                        "campaign_id": str(r["id"]),
+                        "name": r["campaign_name"],
+                        "is_active": r["is_active"],
+                        "start_date": r["start_date"],
+                        "end_date": r["end_date"],
+                        "state": r["current_state"] or "NEW",
+                        "workflow_status": status,
+                        "error": error,
+                        "live_version": view.get("live_version"),
+                        "updated_at": r["updated_at"],
+                    }
+                )
+            return out
 
         return self._run(work)  # type: ignore[no-any-return]
 

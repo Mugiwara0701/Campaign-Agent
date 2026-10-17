@@ -36,6 +36,11 @@ class FakeGateway:
             "last_request": None,
         }
 
+    def campaigns(self, limit: int) -> list[dict[str, Any]]:
+        self._maybe()
+        self.listed = limit
+        return [{"campaign_id": CID, "workflow_status": "RECEIVED"}]
+
     def request_status(self, request_id: str) -> dict[str, Any]:
         self._maybe()
         return {"id": request_id, "status": "done"}
@@ -269,3 +274,12 @@ def test_without_require_user_the_old_dashboard_still_works(
 ) -> None:
     body = {"request_type": "interpret", "requested_by": "priya@example.com"}
     assert client.post(f"/v1/campaigns/{CID}/requests", headers=GOOD, json=body).status_code == 202
+
+
+def test_the_campaign_list(client: TestClient, gw: FakeGateway) -> None:
+    r = client.get("/v1/campaigns?limit=5", headers=GOOD)
+    assert r.status_code == 200 and r.json() == {"campaigns": [{"campaign_id": CID, "workflow_status": "RECEIVED"}]}
+    assert gw.listed == 5
+    assert client.get("/v1/campaigns?limit=0", headers=GOOD).status_code == 422
+    assert client.get("/v1/campaigns?limit=500", headers=GOOD).status_code == 422
+    assert client.get("/v1/campaigns").status_code == 401

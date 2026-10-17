@@ -32,10 +32,38 @@ Every call except `/health` needs `Authorization: Bearer <API_TOKEN>`. Bodies an
 |---|---|
 | `GET /health` | Is the gateway up (no token, no database). |
 | `POST /v1/campaigns/{campaign_id}/requests` | Send a request. Returns `202` at once: `{"request_id", "status": "pending", "duplicate"}`. |
-| `GET /v1/campaigns/{campaign_id}` | What to show: `state`, `revision`, `review_view`, and the newest request (`last_request`). `state` is `NEW` before the CA has touched it. |
+| `GET /v1/campaigns` | The newest campaigns that are not deleted (`?limit=1..200`, default 50): `campaign_id`, `name`, `is_active`, dates, `state`, `workflow_status`, `error`, `live_version`. |
+| `GET /v1/campaigns/{campaign_id}` | What to show: `state`, `workflow_status`, `error`, `revision`, `review_view` (the proposal), the newest request (`last_request`) and `execution`. `state` is `NEW` before the CA has touched it. |
 | `GET /v1/requests/{request_id}` | One request: `status` (`pending`, `processing`, `done`, `failed`), `error_code`, `error_detail`, `result`. |
 | `GET /v1/ca` | `online` (heartbeat under a minute old), `status`, and `control` (`desired_state`, `actual_state`). |
 | `POST /v1/ca/state` | `{"state": "paused" or "running", "requested_by": "..."}`. Pausing the CA also stops the Marketing Agent. |
+
+### Workflow status
+
+`state` is the Campaign Agent's own review state. `workflow_status` is one answer across both agents, derived from what is
+stored (`src/campaign_agent/api/workflow.py`):
+
+| `workflow_status` | Meaning |
+|---|---|
+| `RECEIVED` | The campaign exists; the Campaign Agent has not started on it |
+| `RESEARCHING` | Reading the request, researching, compiling and validating a proposal |
+| `NEEDS_INPUT` | A question for the person, or validation needs a decision |
+| `CHANGES_REQUESTED` | The person asked for a change; a new version is being prepared |
+| `PENDING_CAMPAIGN_APPROVAL` | A validated version waits for approval (approve it by its `version` and `sha256`) |
+| `APPROVED` | Approved; being published |
+| `REJECTED` | Discarded before it was ever live |
+| `CONFIG_READY` | Live; the Marketing Agent has not confirmed this exact version yet |
+| `DELIVERED_TO_MA` | The Marketing Agent confirmed it runs this campaign id, version and sha256 |
+| `PROCESSING` | Delivered, and the Marketing Agent has found leads for it |
+| `FAILED` | A person must look: `error` says why (model down, publish failed, or the Marketing Agent refused the version) |
+| `CANCELLED` | It was live and is not any more (switched off, or replaced by another campaign) |
+
+There is no "completed": a campaign runs until it is switched off.
+
+`execution` (only once published): counts of the Marketing Agent's leads by lead status and emails by email status for this
+campaign, e.g. `{"leads": {"QUALIFIED": 4, "SENT": 1}, "emails": {"drafted": 2, "sent": 1}}`. Counts only, no names or
+addresses. `null` until `migrations/repeatable/ma_campaign_progress.sql` could be applied (it needs the Marketing Agent's
+migration 0014).
 
 ### Send a request
 
