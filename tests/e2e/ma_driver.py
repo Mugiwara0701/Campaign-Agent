@@ -78,6 +78,22 @@ async def main(work: Path) -> dict[str, Any]:
     ).fetchone()
     out["lead_campaign"] = [row[0], row[1]] if row else None
     out["email_status_before"] = email.status if email else None
+    out["email_to"] = email.to if email else None
+    if email is not None:
+        erow = repo.db.execute(
+            "select source_campaign_id, source_campaign_version from emails where id = ?",
+            (email.email_id,),
+        ).fetchone()
+        out["email_campaign"] = [erow[0], erow[1]]
+        # The Slack card (the dry-run approver writes it to a file): campaign, recipient, subject, whole body.
+        card = (work / "slack" / "approvals" / f"{email.email_id}.md").read_text(encoding="utf-8")
+        out["card_shows"] = {
+            "campaign": campaign[0] in card,
+            "draft": email.email_id in card,
+            "recipient": email.to in card,
+            "subject": email.subject in card,
+            "body": email.body in card,
+        }
 
     # 3. Nothing is sent before a person approves; then exactly one, once.
     outbox = sender.OutboxTransport(work / "out")
@@ -97,7 +113,13 @@ async def main(work: Path) -> dict[str, Any]:
         t: repo.db.execute(f"select count(*) from {t}").fetchone()[0]  # noqa: S608 - fixed names
         for t in ("companies", "contacts", "emails", "approvals")
     }
-    out["outbox_files"] = len(list((work / "out" / "outbox").glob("*.txt")))
+    files = sorted((work / "out" / "outbox").glob("*.txt"))
+    out["outbox_files"] = len(files)
+    if files and email is not None:
+        mail = files[0].read_text(encoding="utf-8")
+        out["sent_matches_approval"] = (
+            f"To: {email.to}" in mail and f"Subject: {email.subject}" in mail and email.body in mail
+        )
     while await campaign_link.send_pending(link):
         pass
     await repo.close()
