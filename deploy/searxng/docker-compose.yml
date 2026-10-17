@@ -1,0 +1,16 @@
+# The Campaign Agent's own search instance, for research (docs/research.md). Never shared with the Marketing Agent: a
+# CAPTCHA or a block on one must not stop the other. Listens on this machine's localhost only.
+# The administrator runs, once (Docker needs sudo; the campaign-agent account has none):
+#   sudo apt-get install -y docker.io docker-compose-v2
+#   sudo docker compose -f /home/<campaign-agent user>/Desktop/Campaign-Agent/deploy/searxng/docker-compose.yml up -d
+# then in the Campaign Agent's .env: RESEARCH_ENABLED=true and SEARXNG_URL=http://127.0.0.1:8888, and restart it.
+services:
+  searxng:
+    image: searxng/searxng:latest  # the same image as the Marketing Agent's instance
+    restart: unless-stopped
+    ports: ["127.0.0.1:8888:8080"]
+    environment:
+      # Overrides the placeholder in settings.yml; set it in a .env file next to this one (not in git).
+      SEARXNG_SECRET: ${SEARXNG_SECRET:?set SEARXNG_SECRET in deploy/searxng/.env}
+    volumes:
+      - ./settings.yml:/etc/searxng/settings.yml:ro
