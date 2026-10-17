@@ -201,7 +201,9 @@ def test_both_agents_from_request_to_one_sent_email(
     # The fake web also has a shop page, a blocked site and a parts distributor: none became a company or a draft.
     assert out["pipeline"]["leads_qualified"] == 1, out["pipeline"]
     assert out["email_campaign"] == [cid, 2]
-    assert out["card_shows"] == dict.fromkeys(("campaign", "draft", "recipient", "subject", "body"), True)
+    assert out["card_shows"] == dict.fromkeys(
+        ("campaign", "draft", "recipient", "subject", "body"), True
+    )
     assert out["sent_matches_approval"] is True  # the mail that left is exactly what was approved
 
     # Back on the CA: the MA's confirmation of the exact version, and its events, arrived.
