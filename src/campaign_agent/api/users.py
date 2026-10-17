@@ -49,7 +49,7 @@ class UserVerifier:
         )
 
     def verify(self, token: str) -> User:
-        options: dict[str, Any] = {"require": ["exp", "sub"]}
+        options: Any = {"require": ["exp", "sub"]}  # jwt.types.Options (a TypedDict)
         try:
             alg = jwt.get_unverified_header(token).get("alg")
             if alg == "HS256":

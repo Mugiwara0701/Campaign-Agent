@@ -107,7 +107,8 @@ jobs:
         run: |
           ref="${MA_REF:-}"
           if [ -z "$ref" ]; then
-            if git ls-remote --exit-code --heads https://github.com/Mugiwara0701/Marketing-AI-Agent.git "$BRANCH" >/dev/null; then
+            repo=https://github.com/Mugiwara0701/Marketing-AI-Agent.git
+            if git ls-remote --exit-code --heads "$repo" "$BRANCH" >/dev/null; then
               ref="$BRANCH"
             else
               ref=main

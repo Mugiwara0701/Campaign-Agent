@@ -355,10 +355,10 @@ def test_the_example_campaign_flows_from_text_to_a_valid_candidate() -> None:
     assert not out.rejected
     candidate = build_candidate(out.ir)
     assert candidate.can_freeze
-    assert {n.proposal for n in candidate.not_applied} == {
-        "targeting.include_countries",
-        "targeting.employee_range",
-    }
+    # Countries are applied now (the Marketing Agent rejects companies placed elsewhere): reported as partly applied,
+    # with no proposal. Company size is still not applied.
+    assert {n.proposal for n in candidate.not_applied} == {None, "targeting.employee_range"}
+    assert "include_countries" in candidate.yaml
     assert "in-vehicle infotainment system" in candidate.yaml
     assert "employee" not in candidate.yaml
 

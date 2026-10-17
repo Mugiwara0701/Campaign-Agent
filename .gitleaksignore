@@ -22,3 +22,6 @@ ac2f826d8eb4edbb27b03b2c77cf263f9d4793c2:qa/ca/link.py:aws-access-token:131
 ac2f826d8eb4edbb27b03b2c77cf263f9d4793c2:qa/ca/link.py:generic-api-key:131
 ac2f826d8eb4edbb27b03b2c77cf263f9d4793c2:qa/ca/lifecycle.py:aws-access-token:314
 ac2f826d8eb4edbb27b03b2c77cf263f9d4793c2:qa/ca/lifecycle.py:generic-api-key:314
+# The formatting bot joined those split pieces back into one string in its commit; split again with "+" since.
+ed2cc1f7b95d67694b317ff663d6e9ad38f25487:qa/ca/link.py:aws-access-token:131
+ed2cc1f7b95d67694b317ff663d6e9ad38f25487:qa/ca/link.py:generic-api-key:131
