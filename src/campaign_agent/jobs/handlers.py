@@ -593,7 +593,11 @@ def _brief_view(brief: Brief, sha256: str) -> BriefView:
 
 
 def _brief(
-    svc: Services | None, t: _Turn, view: ReviewView, prev: ReviewView | None, error: RequestError | None
+    svc: Services | None,
+    t: _Turn,
+    view: ReviewView,
+    prev: ReviewView | None,
+    error: RequestError | None,
 ) -> BriefView | None:
     """The brief for the version on screen: the one already written for it, or a new one for a version just frozen.
     Never written for a refused request or an unvalidated candidate; research off means no brief."""

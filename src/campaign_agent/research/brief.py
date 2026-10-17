@@ -170,7 +170,7 @@ def reply_schema() -> dict[str, Any]:
         "additionalProperties": False,
         "required": [*SECTIONS, "not_confirmed"],
         "properties": {
-            **{s: section for s in SECTIONS},
+            **dict.fromkeys(SECTIONS, section),
             "not_confirmed": {
                 "type": "array",
                 "maxItems": MAX_ITEMS,
@@ -234,7 +234,9 @@ class BriefWriter:
             return self._write(ir)
         except Exception:
             log.exception("research brief failed")
-            return self._unavailable((), "the research brief failed unexpectedly", ("brief_failed",))
+            return self._unavailable(
+                (), "the research brief failed unexpectedly", ("brief_failed",)
+            )
 
     def _unavailable(self, queries: tuple[str, ...], why: str, notes: tuple[str, ...]) -> Brief:
         return Brief(
@@ -251,7 +253,9 @@ class BriefWriter:
         queries = tuple(q for _, q in built)
         if not built:
             return self._unavailable(
-                queries, "nothing to research: the campaign names no industry, product or technology", tuple(notes)
+                queries,
+                "nothing to research: the campaign names no industry, product or technology",
+                tuple(notes),
             )
         pages: list[Page] = []
         for _section, query in built:
@@ -307,11 +311,9 @@ class BriefWriter:
                 else:
                     items.append(BriefItem(text, sources))
             kept[section] = tuple(items)
-        missing = [
-            f"no source found for {s.replace('_', ' ')}" for s in SECTIONS if not kept[s]
-        ]
+        missing = [f"no source found for {s.replace('_', ' ')}" for s in SECTIONS if not kept[s]]
         extra = [" ".join(n.split()) for n in reply.not_confirmed if acceptable(n)]
-        not_confirmed = tuple(dict.fromkeys([*missing, *extra]))[:MAX_ITEMS + len(SECTIONS)]
+        not_confirmed = tuple(dict.fromkeys([*missing, *extra]))[: MAX_ITEMS + len(SECTIONS)]
         status: Status = (
             "unavailable"
             if all(not kept[s] for s in SECTIONS)
