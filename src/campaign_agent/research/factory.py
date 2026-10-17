@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from campaign_agent.llm.adapter import GenParams, LLMAdapter
 from campaign_agent.research import Researcher
-from campaign_agent.research.brief import BriefWriter
+from campaign_agent.research.brief import ANSWER_TOKENS, BriefWriter
 from campaign_agent.research.fetcher import PageFetcher
 from campaign_agent.research.search_client import (
     DEFAULT_DENY,
@@ -56,5 +56,5 @@ def build_brief_writer(settings: Settings, adapter: LLMAdapter) -> BriefWriter |
         SearxngClient(settings.searxng_url, domains, timeout_s=settings.research_timeout_s),
         PageFetcher(domains, timeout_s=settings.research_timeout_s),
         adapter,
-        GenParams(timeout_s=settings.llm_timeout_s, max_tokens=1200),
+        GenParams(timeout_s=settings.research_brief_timeout_s, max_tokens=ANSWER_TOKENS),
     )
