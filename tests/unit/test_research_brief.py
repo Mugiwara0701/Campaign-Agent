@@ -26,6 +26,7 @@ from campaign_agent.research.query_policy import check_query
 from campaign_agent.research.search_client import SearchError, SearchHit
 from tests.unit.helpers import COMPLETE_REPLY, ir_with
 
+# hits(n) gives the same results to every query; pages are read in order, so page 1 is URL0 and page 2 is URL1.
 URL0, URL1 = "https://docs.example.org/0", "https://docs.example.org/1"
 IR = ir_with(
     ("audience.industries", ["automotive"]),
@@ -65,12 +66,12 @@ def hits(n: int) -> list[SearchHit]:
 def model_reply(**over: Any) -> str:
     base: dict[str, Any] = {
         "company_types": [
-            {"text": "Makers of in-vehicle infotainment units", "source_urls": [URL0]}
+            {"text": "Makers of in-vehicle infotainment units", "pages": [1]}
         ],
         "buying_signals": [
-            {"text": "Moving a product to a new Android version", "source_urls": [URL1]}
+            {"text": "Moving a product to a new Android version", "pages": [2]}
         ],
-        "key_terms": [{"text": "digital cockpit", "source_urls": [URL0]}],
+        "key_terms": [{"text": "digital cockpit", "pages": [1]}],
         "not_confirmed": ["typical project budgets"],
     }
     return json.dumps({**base, **over})
@@ -123,7 +124,7 @@ def test_a_brief_with_sources_that_were_read() -> None:
 def test_a_statement_whose_source_was_not_read_is_dropped_and_reported() -> None:
     reply = model_reply(
         key_terms=[
-            {"text": "cockpit domain controller", "source_urls": ["https://elsewhere.example/x"]}
+            {"text": "cockpit domain controller", "pages": [9]}
         ]
     )
     brief = writer(SpySearch(hits(4)), SpyFetcher(), reply).write(IR)
@@ -144,7 +145,7 @@ def test_a_statement_whose_source_was_not_read_is_dropped_and_reported() -> None
 )
 def test_a_statement_that_names_an_organisation_or_has_an_address_is_dropped(text: str) -> None:
     assert not acceptable(text)
-    reply = model_reply(company_types=[{"text": text, "source_urls": [URL0]}])
+    reply = model_reply(company_types=[{"text": text, "pages": [1]}])
     brief = writer(SpySearch(hits(4)), SpyFetcher(), reply).write(IR)
     assert brief.company_types == ()
 
@@ -159,8 +160,8 @@ def test_plain_statements_are_kept() -> None:
         (SpySearch(SearchError("down")), SpyFetcher(), model_reply(), "no web page could be read"),
         (SpySearch(hits(2)), SpyFetcher(fail=True), model_reply(), "no web page could be read"),
         (SpySearch([]), SpyFetcher(), model_reply(), "no web page could be read"),
-        (SpySearch(hits(2)), SpyFetcher(), "not json at all", "no usable answer"),
-        (SpySearch(hits(2)), SpyFetcher(), json.dumps({"extra": 1}), "no usable answer"),
+        (SpySearch(hits(2)), SpyFetcher(), "not json at all", "could not be read"),
+        (SpySearch(hits(2)), SpyFetcher(), json.dumps({"extra": 1}), "could not be read"),
         (SpySearch(RuntimeError("bug")), SpyFetcher(), model_reply(), "failed unexpectedly"),
     ],
 )
@@ -245,3 +246,35 @@ def test_the_model_reads_only_the_start_of_each_page() -> None:
 
     prompt = user_prompt(IR, [Page(URL0, "a" * 10_000)])
     assert prompt.count("a" * PAGE_CHARS) == 1 and "a" * (PAGE_CHARS + 1) not in prompt
+
+
+def test_a_cut_off_answer_is_reported_as_cut_off() -> None:
+    from campaign_agent.llm.adapter import RawResult, Usage
+
+    cut = model_reply()[:120]
+
+    def reply(_messages: Any) -> str:
+        return cut
+
+    adapter = StubAdapter([reply])
+    real = adapter.generate
+
+    def generate(*a: Any, **k: Any) -> RawResult:
+        raw = real(*a, **k)
+        return RawResult(raw.text, Usage(1500, k["params"].max_tokens), 1.0, "stub", "m", raw.mode)
+
+    adapter.generate = generate  # type: ignore[method-assign]
+    brief = BriefWriter(SpySearch(hits(4)), SpyFetcher(), adapter).write(IR)
+    assert brief.status == "unavailable" and "cut off at" in brief.not_confirmed[0]
+
+
+def test_pages_are_cited_by_number_and_numbers_become_the_pages_urls() -> None:
+    from campaign_agent.research.brief import reply_schema, user_prompt
+
+    prompt = user_prompt(IR, [Page(URL0, "a"), Page(URL1, "b")])
+    assert f'<page n="1" url="{URL0}">' in prompt and f'<page n="2" url="{URL1}">' in prompt
+    schema = reply_schema(2)["properties"]["company_types"]["items"]["properties"]["pages"]
+    assert schema["items"]["maximum"] == 2
+    reply = model_reply(company_types=[{"text": "Makers of cockpit units", "pages": [2, 1, 2, 7]}])
+    brief = writer(SpySearch(hits(4)), SpyFetcher(), reply).write(IR)
+    assert brief.company_types[0].sources == (URL1, URL0)  # in the model's order, once each; 7 is ignored
