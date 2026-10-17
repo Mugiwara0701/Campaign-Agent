@@ -278,7 +278,9 @@ def test_without_require_user_the_old_dashboard_still_works(
 
 def test_the_campaign_list(client: TestClient, gw: FakeGateway) -> None:
     r = client.get("/v1/campaigns?limit=5", headers=GOOD)
-    assert r.status_code == 200 and r.json() == {"campaigns": [{"campaign_id": CID, "workflow_status": "RECEIVED"}]}
+    assert r.status_code == 200 and r.json() == {
+        "campaigns": [{"campaign_id": CID, "workflow_status": "RECEIVED"}]
+    }
     assert gw.listed == 5
     assert client.get("/v1/campaigns?limit=0", headers=GOOD).status_code == 422
     assert client.get("/v1/campaigns?limit=500", headers=GOOD).status_code == 422

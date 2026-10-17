@@ -45,11 +45,20 @@ def test_failures_say_what_to_look_at() -> None:
 def test_after_publication_the_marketing_agent_decides_the_status() -> None:
     live = {"live": True, "applied": None}
     assert workflow_status("PUBLISHED", live, None) == ("CONFIG_READY", None)
-    assert workflow_status("PUBLISHED", {**live, "applied": True}, None) == ("DELIVERED_TO_MA", None)
+    assert workflow_status("PUBLISHED", {**live, "applied": True}, None) == (
+        "DELIVERED_TO_MA",
+        None,
+    )
     found = {"leads": {"DISCOVERED": 2}, "emails": {}}
-    assert workflow_status("PUBLISHED", {**live, "applied": True}, None, found) == ("PROCESSING", None)
+    assert workflow_status("PUBLISHED", {**live, "applied": True}, None, found) == (
+        "PROCESSING",
+        None,
+    )
     none_yet = {"leads": {}, "emails": {}}
-    assert workflow_status("PUBLISHED", {**live, "applied": True}, None, none_yet)[0] == "DELIVERED_TO_MA"
+    assert (
+        workflow_status("PUBLISHED", {**live, "applied": True}, None, none_yet)[0]
+        == "DELIVERED_TO_MA"
+    )
     refused = {**live, "applied": False, "ma_error": "config_version 9 is not supported"}
     assert workflow_status("PUBLISHED", refused, None) == (
         "FAILED",

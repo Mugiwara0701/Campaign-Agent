@@ -33,7 +33,7 @@ def make_router(gateway: Gateway, guard: Any, user_of: Any = lambda: None) -> AP
         )
 
     @router.get("")
-    def index(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:  # noqa: B008
+    def index(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
         """The newest campaigns that are not deleted, with their `workflow_status` (api/workflow.py)."""
         return {"campaigns": gateway.campaigns(limit)}
 

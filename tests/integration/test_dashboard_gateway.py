@@ -71,7 +71,9 @@ def test_pause_and_resume_and_the_status(gateway: Gateway, db: Database) -> None
     assert gateway.set_ca_state("running", "priya@example.com")["desired_state"] == "running"
 
 
-def test_the_workflow_status_and_the_list_as_the_dashboard_role(gateway: Gateway, db: Database) -> None:
+def test_the_workflow_status_and_the_list_as_the_dashboard_role(
+    gateway: Gateway, db: Database
+) -> None:
     cid = new_campaign(db, detail="Find automotive companies that need Yocto help")
     fresh = gateway.campaign(cid)
     assert fresh["workflow_status"] == "RECEIVED" and fresh["execution"] is None
