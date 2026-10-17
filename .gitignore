@@ -221,3 +221,8 @@ __marimo__/
 
 # Where the office machine is (deploy/remote.sh init)
 .remote.env
+
+# qa soak test: results and the token file
+qa/results/
+qa-results/
+qa/.env.qa
