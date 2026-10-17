@@ -36,7 +36,7 @@ and per-campaign lead and email counts: see [dashboard-api.md](dashboard-api.md#
 One Supabase project holds the dashboard's `campaign` table, the CA's tables and the MA's tables. Order:
 
 1. **MA first** (an older MA refuses campaigns that use `include_countries`): `python -m agent migrate` with the owner URL
-   (adds 0014 approval binding and campaign attribution, 0015 the `marketing_agent` role).
+   (adds 0014 approval binding and campaign attribution, 0015 the `marketing_agent` role, 0016 approvals bound to what the Slack card showed).
 2. **CA:** `bash deploy/remote.sh migrate --plan`, then `bash deploy/remote.sh migrate` (0025 and the repeatable files:
    the MA pipeline grants and the per-campaign progress counts, applied again on every run, so order mistakes fix
    themselves).
