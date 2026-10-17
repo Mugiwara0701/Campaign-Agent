@@ -39,8 +39,8 @@ async def main(work: Path) -> dict[str, Any]:
     base = config.load().raw
 
     # 1. Pick the campaign up (twice: the second is a "nothing changed" answer), report it, send the events.
-    effective = await campaign_link.apply_campaign(base, pass_id="e2e-1")
-    again = await campaign_link.apply_campaign(base, pass_id="e2e-2")
+    effective = await campaign_link.apply_campaign(base, pass_id="e2e-1")  # noqa: S106 - a pass name
+    again = await campaign_link.apply_campaign(base, pass_id="e2e-2")  # noqa: S106 - a pass name
     out["same_config_twice"] = again == effective
     sent_events = 0
     while n := await campaign_link.send_pending(link):
