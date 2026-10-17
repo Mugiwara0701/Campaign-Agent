@@ -287,10 +287,14 @@ def test_the_campaign_list(client: TestClient, gw: FakeGateway) -> None:
     assert client.get("/v1/campaigns").status_code == 401
 
 
-def test_a_user_token_is_ignored_until_the_gateway_can_check_it(client: TestClient, gw: FakeGateway) -> None:
+def test_a_user_token_is_ignored_until_the_gateway_can_check_it(
+    client: TestClient, gw: FakeGateway
+) -> None:
     """The dashboard forwards its users' tokens before API_SUPABASE_URL is set on the gateway: requests must still work,
     recorded with `requested_by` as before (a refusal here stopped every dashboard request)."""
     body = {"request_type": "interpret", "requested_by": "priya@example.com"}
-    r = client.post(f"/v1/campaigns/{CID}/requests", headers={**GOOD, "X-User-Token": "anything"}, json=body)
+    r = client.post(
+        f"/v1/campaigns/{CID}/requests", headers={**GOOD, "X-User-Token": "anything"}, json=body
+    )
     assert r.status_code == 202
     assert gw.sent[-1][4] == "priya@example.com"
