@@ -139,10 +139,12 @@ Negative cases:
 
 ### CI status of the verified commits
 
-| Repository | Tests | Type check | Lint | Secret scan |
-|---|---|---|---|---|
-| CA `3004ced` | pass (unit, integration on PostgreSQL), contract and two-agent job pass | pass | formatting fixed by the repository's format bot in the next commit | scanner error ("Unexpected exit code [1]", not "leaks detected"); it passed on `204b27f`, which added the test token; to re-check on the next run |
-| MA `d3e7c82` | pass (with PostgreSQL) | pass | one formatting line, fixed in `829d66e` (not yet re-checked when this was written) | pass |
+| Repository | Commit | Result |
+|---|---|---|
+| CA | `3004ced` | tests, type check, contract and two-agent job pass (3 run, 0 skipped); lint fixed by the format bot in the next commit; secret scan hit a scanner error |
+| CA | `cbcd50b` (this report, on top of the format fix) | **all checks pass**, secret scan included (run 39023386475) |
+| MA | `d3e7c82` | tests (with PostgreSQL), type check and security pass; one formatting line |
+| MA | `829d66e` (that line fixed) | **all checks pass**: ci 39023367598, lint 39023367614, security 39023367499 |
 
 ## F. Remaining blockers
 
