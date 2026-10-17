@@ -91,6 +91,82 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest --cov --cov-report=term-missing
 
+  contract-ma:
+    # Level 6 against the real Marketing Agent, not the stand-in in tests/e2e/fake_ma (audit 2026-10-17, F-03, F-25).
+    # The MA branch: the repository variable MA_REF when set, else the branch with the same name as this one when the MA
+    # has it (a change made in both repositories is tested together), else main.
+    # It also runs both agents end to end (tests/e2e/test_two_agents.py), so it has its own throwaway database.
+    name: Contract with the real Marketing Agent
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pick the Marketing Agent branch
+        id: ma
+        env:
+          MA_REF: ${{ vars.MA_REF }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          ref="${MA_REF:-}"
+          if [ -z "$ref" ]; then
+            repo=https://github.com/Mugiwara0701/Marketing-AI-Agent.git
+            if git ls-remote --exit-code --heads "$repo" "$BRANCH" >/dev/null; then
+              ref="$BRANCH"
+            else
+              ref=main
+            fi
+          fi
+          echo "Marketing Agent branch: $ref"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: Mugiwara0701/Marketing-AI-Agent
+          ref: ${{ steps.ma.outputs.ref }}
+          path: marketing-agent
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            marketing-agent/requirements.txt
+      - run: pip install -e ".[dev]"
+      - name: The Marketing Agent in its own virtual environment, as on its machine
+        working-directory: marketing-agent
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -r requirements.txt
+      - run: pytest tests/e2e/test_real_ma.py tests/e2e/test_two_agents.py -v --junitxml=two-agents.xml
+        env:
+          REAL_MA_CHECKOUT: ${{ github.workspace }}/marketing-agent
+          REAL_MA_PYTHON: ${{ github.workspace }}/marketing-agent/.venv/bin/python
+      # These tests skip themselves when their setup is missing: here a skip is a failure, and the counts are shown.
+      - name: Nothing skipped
+        if: always()
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse("two-agents.xml").getroot()
+          suite = root if root.tag == "testsuite" else root.find("testsuite")
+          n, s, f, e = (int(suite.get(k, 0)) for k in ("tests", "skipped", "failures", "errors"))
+          names = [c.get("name") for c in suite.iter("testcase")]
+          print(f"::notice title=two-agent tests::{n} run, {s} skipped, {f} failed, {e} errors: {', '.join(names)}")
+          raise SystemExit(1 if s or f or e or not n else 0)
+          PY
+
   scripts:
     name: Shell scripts
     runs-on: ubuntu-latest

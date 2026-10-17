@@ -11,6 +11,9 @@ Rules:
     recorded when it runs here.
   * Two runners at once cannot interleave: each migration takes a transaction-level advisory lock first.
   * `--plan` only reads. The connection string's password is never printed.
+  * Files in migrations/repeatable/ are applied on EVERY run, after the numbered ones, and never recorded: they must be
+    safe to repeat. They hold what depends on objects another repository creates (the Marketing Agent's
+    request_pipeline()), so applying the two repositories in the "wrong" order fixes itself on the next run.
 """
 
 import getpass
@@ -69,6 +72,26 @@ def discover(directory: Path) -> list[Migration]:
     if bad:
         raise ValueError(f"migration files must be named 0001_some_name.sql: {bad}")
     return [Migration(f.name, f.read_text(encoding="utf-8")) for f in files]
+
+
+def discover_repeatable(directory: Path) -> list[Migration]:
+    """migrations/repeatable/*.sql, in name order. None when the folder is not there."""
+    folder = directory / "repeatable"
+    if not folder.is_dir():
+        return []
+    return [Migration(f.name, f.read_text(encoding="utf-8")) for f in sorted(folder.glob("*.sql"))]
+
+
+def apply_repeatable(db: Database, migration: Migration) -> None:
+    """Apply a repeatable file in one transaction (under the same lock as the numbered ones). Not recorded."""
+    try:
+        with db.transaction() as conn:
+            conn.execute("select pg_advisory_xact_lock(%s)", (LOCK_KEY,))
+            conn.execute(migration.sql)  # no parameters: the files may contain % and $$
+    except psycopg.Error as exc:
+        raise MigrationError(
+            f"repeatable/{migration.name}", type(exc).__name__, str(exc).splitlines()[0][:300]
+        ) from exc
 
 
 def describe(url: str) -> Target:
@@ -178,16 +201,20 @@ def run_migrate(
     db = Database(url)
     try:
         migrations = discover(directory or default_dir())
+        repeatable = discover_repeatable(directory or default_dir())
         todo = pending(db, migrations)
         have = applied_names(db)
         out(f"database: {describe(url)}")
         out(f"already recorded: {len(have)}; files here: {len(migrations)}")
         if not todo:
             out("Up to date: nothing to apply.")
-            return 0
+            # The repeatable files are safe to run again: no question is asked for them.
+            return 0 if plan_only else _reapply(db, repeatable, out)
         out("to apply, in this order:")
         for m in todo:
             out(f"  {m.name}")
+        for r in repeatable:
+            out(f"  repeatable/{r.name} (applied on every run)")
         if plan_only:
             return 0
         if not assume_yes:
@@ -211,10 +238,24 @@ def run_migrate(
                 )
                 return 1
             out(f"applied {m.name}" if applied else f"skipped {m.name} (recorded meanwhile)")
+        if _reapply(db, repeatable, out):
+            return 1
         out("Done.")
         return 0
     finally:
         db.close()
+
+
+def _reapply(db: Database, repeatable: list[Migration], out: Callable[[str], None]) -> int:
+    """0 = every repeatable file applied; 1 = one failed (the ones before it stay applied)."""
+    for r in repeatable:
+        try:
+            apply_repeatable(db, r)
+        except MigrationError as exc:
+            out(f"FAILED  {exc}")
+            return 1
+        out(f"re-applied repeatable/{r.name}")
+    return 0
 
 
 def run_agent_password(

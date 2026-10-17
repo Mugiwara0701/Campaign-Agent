@@ -43,6 +43,12 @@ Term = Annotated[
 TermList = Annotated[list[Term], Field(max_length=30)]  # campaign-sized lists
 # base config lists (the exclusions are long)
 BaseTermList = Annotated[list[Term], Field(max_length=300)]
+# Contact roles a campaign may put first (the same vocabulary as the IR's contacts.preferred_roles). The Marketing
+# Agent maps each to its own role rules (agent/leadgen/contacts.py PREFERRED_ROLES).
+PreferredRole = Literal[
+    "cto", "vp_engineering", "engineering_director", "engineering_manager", "founder", "procurement"
+]
+PreferredRoles = Annotated[list[PreferredRole], Field(max_length=6)]
 # Free vocabulary text kept in the base config (phrases, labels). Not emitted by the CA.
 Phrase = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)]
 Tld = Annotated[
@@ -140,6 +146,10 @@ class LeadgenFile(_Strict):
     exclude_companies: BaseTermList = []
     exclude_countries: BaseTermList = []
     exclude_tlds: Annotated[list[Tld], Field(max_length=100)] = []
+    # Only companies in these countries (empty: any country not excluded). Set by a campaign, never by the base.
+    include_countries: TermList = []
+    # People in these roles are contacted first, in this order (empty: the Marketing Agent's own order).
+    preferred_roles: PreferredRoles = []
     contacts: Contacts
     limits: Limits = Limits()
     desktop_engines: Annotated[list[Phrase], Field(min_length=1)] = ["default"]
@@ -216,6 +226,10 @@ class CampaignOverlay(_Strict):
     exclude_companies: TermList = []
     exclude_countries: TermList = []
     exclude_tlds: Annotated[list[Tld], Field(max_length=30)] = []
+    # Replaces (it is not added to anything): the Marketing Agent rejects a company it can place outside these countries.
+    include_countries: TermList = []
+    # Replaces: people in these roles are contacted first, in this order; other approachable roles still follow.
+    preferred_roles: PreferredRoles = []
     limits: OverlayLimits = OverlayLimits()
 
     @model_validator(mode="after")

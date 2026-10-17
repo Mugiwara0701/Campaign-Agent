@@ -36,6 +36,11 @@ class FakeGateway:
             "last_request": None,
         }
 
+    def campaigns(self, limit: int) -> list[dict[str, Any]]:
+        self._maybe()
+        self.listed = limit
+        return [{"campaign_id": CID, "workflow_status": "RECEIVED"}]
+
     def request_status(self, request_id: str) -> dict[str, Any]:
         self._maybe()
         return {"id": request_id, "status": "done"}
@@ -174,3 +179,109 @@ def test_pausing_goes_through(client: TestClient) -> None:
         ).status_code
         == 422
     )
+
+
+# --- the signed-in person (api/users.py, audit F-18) ---------------------------------------------------------------------
+
+SECRET = "s" * 40
+
+
+def _user_token(role: str | None = "admin", email: str = "Priya@Example.com", **over: Any) -> str:
+    import time
+
+    import jwt
+
+    claims: dict[str, Any] = {
+        "sub": "u1",
+        "email": email,
+        "aud": "authenticated",
+        "exp": int(time.time()) + 600,
+        "app_metadata": {"role": role} if role else {},
+        **over,
+    }
+    return jwt.encode(claims, SECRET, algorithm="HS256")
+
+
+@pytest.fixture
+def strict(gw: FakeGateway) -> TestClient:
+    from campaign_agent.api.users import UserVerifier
+
+    return TestClient(
+        create_app(gw, token=TOKEN, users=UserVerifier(jwt_secret=SECRET), require_user=True)  # type: ignore[arg-type]
+    )
+
+
+def test_the_approval_record_is_the_verified_person_not_what_the_body_says(
+    strict: TestClient, gw: FakeGateway
+) -> None:
+    body = {
+        "request_type": "interpret",
+        "requested_by": "someone-else@example.com",
+        "idempotency_key": "k",
+    }
+    r = strict.post(
+        f"/v1/campaigns/{CID}/requests", headers={**GOOD, "X-User-Token": _user_token()}, json=body
+    )
+    assert r.status_code == 202
+    assert gw.sent[0][4] == "priya@example.com"
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        None,  # required, and missing
+        "not-a-jwt",
+        "EXPIRED",
+        "NO_ROLE",
+    ],
+)
+def test_a_missing_or_bad_user_token_is_refused(
+    strict: TestClient, gw: FakeGateway, token: str | None
+) -> None:
+    value = {
+        "EXPIRED": _user_token(exp=1),
+        "NO_ROLE": _user_token(role=None),
+    }.get(token or "", token)
+    headers = {**GOOD, **({"X-User-Token": value} if value else {})}
+    body = {"request_type": "interpret", "requested_by": "x"}
+    assert (
+        strict.post(f"/v1/campaigns/{CID}/requests", headers=headers, json=body).status_code == 401
+    )
+    assert gw.sent == []
+
+
+def test_only_an_admin_changes_a_campaign_or_resumes_but_anyone_may_pause(
+    strict: TestClient, gw: FakeGateway
+) -> None:
+    employee = {**GOOD, "X-User-Token": _user_token(role="employee")}
+    body = {
+        "request_type": "approve",
+        "requested_by": "x",
+        "payload": {"version": 1, "sha256": "a" * 64},
+    }
+    assert (
+        strict.post(f"/v1/campaigns/{CID}/requests", headers=employee, json=body).status_code == 403
+    )
+    assert gw.sent == []
+    pause = {"state": "paused", "requested_by": "x"}
+    assert strict.post("/v1/ca/state", headers=employee, json=pause).status_code == 200
+    resume = {"state": "running", "requested_by": "x"}
+    assert strict.post("/v1/ca/state", headers=employee, json=resume).status_code == 403
+
+
+def test_without_require_user_the_old_dashboard_still_works(
+    client: TestClient, gw: FakeGateway
+) -> None:
+    body = {"request_type": "interpret", "requested_by": "priya@example.com"}
+    assert client.post(f"/v1/campaigns/{CID}/requests", headers=GOOD, json=body).status_code == 202
+
+
+def test_the_campaign_list(client: TestClient, gw: FakeGateway) -> None:
+    r = client.get("/v1/campaigns?limit=5", headers=GOOD)
+    assert r.status_code == 200 and r.json() == {
+        "campaigns": [{"campaign_id": CID, "workflow_status": "RECEIVED"}]
+    }
+    assert gw.listed == 5
+    assert client.get("/v1/campaigns?limit=0", headers=GOOD).status_code == 422
+    assert client.get("/v1/campaigns?limit=500", headers=GOOD).status_code == 422
+    assert client.get("/v1/campaigns").status_code == 401

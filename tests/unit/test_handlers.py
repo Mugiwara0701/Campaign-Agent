@@ -86,13 +86,16 @@ def test_what_cannot_be_applied_is_listed_not_dropped() -> None:
     )
     out = handle(request("interpret"), workspace(detail=text), svc(r))
     proposals = {n.proposal for n in out.view.not_applied}
-    assert "targeting.include_countries" in proposals
+    assert "targeting.include_countries" not in proposals  # countries are applied now
+    assert any(
+        n.request.startswith("audience.include_countries") for n in out.view.not_applied
+    )  # with its limit
     assert any(n.kind == "channel" for n in out.view.not_applied)
     yaml_text = out.candidate.yaml.split("config_version")[1]  # type: ignore[union-attr]
-    assert "query_suffix: US" in yaml_text  # only as a search hint...
+    assert "query_suffix: US" in yaml_text  # the searches lean that way...
     assert (
-        "include_countries" not in yaml_text
-    )  # ...never as a country list the Marketing Agent would enforce
+        "include_countries" in yaml_text
+    )  # ...and the Marketing Agent rejects companies placed elsewhere
 
 
 # --- failures of the first message ----------------------------------------------------------------------------------

@@ -240,7 +240,7 @@ is the same request, so a retry or a double click never makes two.
 | Accept or reject a suggestion | `suggestion` | `{ "suggestion_id": "s_..", "decision": "accept" }` or `"reject"` | `suggestion-<id>-<decision>` |
 | **Approve** | `approve` | `{ "version": <candidate.version>, "sha256": "<candidate.sha256>", "start_pipeline": true }` | `approve-<version>-<first 12 of sha256>` |
 | Reject | `discard` | `{}` | `discard-<revision>` |
-| Go back to an older version | `rollback` | `{ "version": 1 }` (one that was approved before) | `rollback-<version>-<time>` |
+| Make live (go back to an older approved version, also after a switch-off) | `rollback` | `{ "version": 1 }`; it also starts the MA on it, like an approval; add `"start_pipeline": false` to only make it live | `rollback-<version>-<time>` |
 | Switch the campaign off | `deactivate` | `{}` | `deactivate-<time>` |
 
 **Approving, exactly:**

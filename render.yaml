@@ -17,3 +17,9 @@ services:
       # A long random secret (32+ characters) shared with the dashboard's server, nobody else.
       - key: API_TOKEN
         sync: false
+      # The signed-in person behind each request (api/users.py). Set API_SUPABASE_URL to the dashboard's Supabase URL,
+      # then, once the dashboard forwards X-User-Token, API_REQUIRE_USER=true.
+      - key: API_SUPABASE_URL
+        sync: false
+      - key: API_REQUIRE_USER
+        value: "false"

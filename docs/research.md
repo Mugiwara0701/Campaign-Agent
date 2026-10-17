@@ -77,18 +77,57 @@ Research off, search down, a page that will not load, a model that does not answ
 bug inside the module: the campaign goes on without suggestions. `Researcher.run` never raises. The conversation passes
 through `RESEARCHING` only when research is on and the model asked for something.
 
+## The research brief on a proposal (`research/brief.py`)
+
+With research on, every new version that passes validation gets a **research brief** before anyone approves it: what
+the target customers look like, each statement with the pages it comes from. It is shown in the proposal as
+`review_view.brief` (and by `try`), and it never changes a value of the campaign.
+
+| Part | What it holds |
+|---|---|
+| `company_types` | kinds of organisations that build or need what the campaign is about |
+| `buying_signals` | what shows such an organisation needs outside engineering help |
+| `key_terms` | the words they use for it |
+| `not_confirmed` | what was asked for but no page that was read supports (and every empty part, by name) |
+| `status` | `ready` (all three parts have backed statements), `partial` (some), `unavailable` (none, with the reason) |
+| `for_sha256`, `queries`, `searched_at` | the version it belongs to, what was searched, when |
+
+How it is made: subjects from the campaign's own terms (product + technology, industry + technology) → fixed templates
+("... product development", "... applications", "... engineering challenges", "... explained") → the same query policy as
+above (nothing that seeks companies, people or sellers) → our SearXNG → at most **4 searches and 6 pages**, 2 per query →
+one model call → code checks. A statement is dropped unless it is at most 25 words, has no web or email address and no
+legal-form name (Inc, Ltd, GmbH ...), and every source is a page that was fetched. A part left empty is listed under
+`not_confirmed`.
+
+One brief per version: it is written when a version is frozen and kept, unchanged, while that version is on screen (an
+approval, a refused request or a repeat does not search again). A new version gets a new brief. Any failure (search
+down, no page readable, a model that does not answer or answers nonsense, a bug) gives an `unavailable` brief that says
+why, and the proposal goes on as before. On the CA machine's CPU model it adds a few minutes to the request that
+produces the version. `RESEARCH_BRIEF=false` keeps research suggestions but turns the brief off.
+
+**Known limits:** the check for company names catches legal-form names and addresses, not a bare brand word; the model
+is told not to name companies, and the reviewer sees the sources. The brief describes; it does not prove a market.
+
 ## Turning it on
 
-On the office machine, in `.env`:
+Use **our own** SearXNG instance, on the Campaign Agent machine: `deploy/searxng/` (Docker compose, JSON output, bound
+to localhost). It must not be shared with the Marketing Agent, so a CAPTCHA or a block on one does not stop the other.
+Docker needs the machine's administrator (the `campaign-agent` account has no sudo), once:
+
+```bash
+sudo apt-get install -y docker.io docker-compose-v2
+cd /home/<campaign-agent user>/Desktop/Campaign-Agent/deploy/searxng
+echo "SEARXNG_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(32))')" | sudo tee .env >/dev/null
+sudo docker compose up -d
+curl -s "http://127.0.0.1:8888/search?q=test&format=json" | head -c 200   # JSON back = it works
+```
+
+Then in the Campaign Agent's `.env` (`bash deploy/remote.sh push-env`), and restart it (`bash deploy/remote.sh up`):
 
 ```text
 RESEARCH_ENABLED=true
-SEARXNG_URL=http://127.0.0.1:8080
-```
-
-Use **our own** SearXNG instance, on the Campaign Agent machine. The Marketing Agent's `deploy/searxng/` (a Docker compose
-file with JSON output enabled, bound to localhost) is the template; it must not be shared with the Marketing Agent, so a
-CAPTCHA or a block on one does not stop the other. Optional: `RESEARCH_ALLOW_DOMAINS`, `RESEARCH_DENY_DOMAINS`
+SEARXNG_URL=http://127.0.0.1:8888
+``` Optional: `RESEARCH_ALLOW_DOMAINS`, `RESEARCH_DENY_DOMAINS`
 (comma-separated), `RESEARCH_TIMEOUT_S`.
 
 ## Whether it is worth it

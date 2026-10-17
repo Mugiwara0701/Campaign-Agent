@@ -15,3 +15,13 @@ af1ac94b5094c4d90a2ba9150e8f59a6029c42d9:benchmarks/build_dataset.py:generic-api
 # An example request in docs/dashboard-api.md (the idempotency_key value "interpret-" plus a made-up campaign id)
 # looks like a key to the scanner. It is an invented example, not a credential (the doc text is changed since).
 6183a1496f69f04f08d42e4aa808d3dadf6f5911:docs/dashboard-api.md:generic-api-key:48
+
+# Fake secrets in the qa suite's own checks (a refused event, a refused campaign text) in the commit that added qa/. None is
+# a real credential; they are now split into pieces in the source (audit 2026-10-17).
+ac2f826d8eb4edbb27b03b2c77cf263f9d4793c2:qa/ca/link.py:aws-access-token:131
+ac2f826d8eb4edbb27b03b2c77cf263f9d4793c2:qa/ca/link.py:generic-api-key:131
+ac2f826d8eb4edbb27b03b2c77cf263f9d4793c2:qa/ca/lifecycle.py:aws-access-token:314
+ac2f826d8eb4edbb27b03b2c77cf263f9d4793c2:qa/ca/lifecycle.py:generic-api-key:314
+# The formatting bot joined those split pieces back into one string in its commit; split again with "+" since.
+ed2cc1f7b95d67694b317ff663d6e9ad38f25487:qa/ca/link.py:aws-access-token:131
+ed2cc1f7b95d67694b317ff663d6e9ad38f25487:qa/ca/link.py:generic-api-key:131

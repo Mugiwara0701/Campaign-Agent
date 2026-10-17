@@ -9,7 +9,12 @@ from importlib import metadata
 import psycopg
 
 from campaign_agent.jobs.handlers import Services
-from campaign_agent.jobs.manager import ManagerConfig, process_next, refresh_applied
+from campaign_agent.jobs.manager import (
+    ManagerConfig,
+    process_next,
+    reconcile_deleted,
+    refresh_applied,
+)
 from campaign_agent.store import repositories as repo
 from campaign_agent.store.db import Conn, Database
 
@@ -182,13 +187,17 @@ class Worker:
             return False  # a request was just made; the next cycle takes it
         elif self._clock() - self._last_applied_check >= APPLIED_CHECK_S:
             self._last_applied_check = self._clock()
+            reconcile_deleted(self._db)
             refresh_applied(self._db)
         return did
 
     def _heartbeat_loop(self, db: Database) -> None:
         """Beats on its own connection every HEARTBEAT_S, "busy" while a request runs, so a long request does not make
-        the Campaign Agent look stopped."""
+        the Campaign Agent look stopped. While busy it also renews the request's lease: a request that takes longer than
+        LEASE_S (several slow model calls) is never taken over by another worker while this one still runs it."""
         while not self._beat_stop.wait(HEARTBEAT_S):
+            if self._busy:
+                self._renew_lease(db)
             try:
                 with db.transaction() as conn:
                     repo.beat(
@@ -202,6 +211,17 @@ class Worker:
                     )
             except Exception:
                 log.warning("heartbeat failed", exc_info=False)
+
+    def _renew_lease(self, db: Database) -> None:
+        """Never stops the heartbeat: a failed renewal is retried at the next beat."""
+        lease_s = getattr(self._cfg, "lease_s", None)
+        if not lease_s:
+            return
+        try:
+            with db.transaction() as conn:
+                repo.renew_lease(conn, self._cfg.worker_id, lease_s)
+        except Exception:
+            log.warning("lease renewal failed", exc_info=False)
 
     def _wait(self, seconds: float) -> None:
         """Sleep in one-second slices so a stop request (SIGTERM) is honoured within a second."""

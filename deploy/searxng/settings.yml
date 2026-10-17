@@ -1,0 +1,8 @@
+use_default_settings: true
+server:
+  # Replaced by SEARXNG_SECRET from the environment (docker-compose.yml). Local use only.
+  secret_key: "set-by-SEARXNG_SECRET"
+  limiter: false
+  image_proxy: false
+search:
+  formats: [html, json]  # json is what the Campaign Agent calls

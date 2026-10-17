@@ -2,9 +2,9 @@
 
 The overlay holds only what the user set. Nothing is emitted for:
   * `defaulted` values: the base config already supplies them; pinning a default would freeze it;
-  * fields the contract has no key for (reported as "not applied" instead). One is applied only as a hint:
-    `audience.include_countries` becomes `search.query_suffix` (the country names, added to every search query).
-    The Marketing Agent cannot yet reject companies outside the countries, so it is still reported, as partly applied;
+  * fields the contract has no key for (reported as "not applied" instead).
+`audience.include_countries` becomes the top-level `include_countries` (the Marketing Agent rejects a company it can
+place elsewhere) and, as before, a `search.query_suffix` hint so the searches lean that way;
   * `search.capabilities`: in the MA, project_context.engineering_requirements replaces it when set.
 
 Merge semantics (overlay over base):
@@ -70,14 +70,12 @@ _EXCLUSIONS = {
     "exclusions.companies": ("", "exclude_companies"),
     "exclusions.countries": ("", "exclude_countries"),
     "exclusions.tlds": ("", "exclude_tlds"),
+    "audience.include_countries": ("", "include_countries"),
+    "contacts.preferred_roles": ("", "preferred_roles"),
 }
 _MAPPING = {**_AUDIENCE, **_QUALIFICATION, **_LIMITS, **_EXCLUSIONS}
 
 _PROPOSALS = {
-    "audience.include_countries": (
-        "The contract has no country include list yet.",
-        "targeting.include_countries",
-    ),
     "audience.employee_min": (
         "The Marketing Agent does not extract company size.",
         "targeting.employee_range",
@@ -85,10 +83,6 @@ _PROPOSALS = {
     "audience.employee_max": (
         "The Marketing Agent does not extract company size.",
         "targeting.employee_range",
-    ),
-    "contacts.preferred_roles": (
-        "Contact role priority is fixed in the Marketing Agent code.",
-        "contacts.preferred_roles",
     ),
     "audience.signals": (
         "No contract key for custom signals; hiring and RFP signals are set by "
@@ -170,6 +164,9 @@ def compile_overlay(ir: CampaignIR) -> CompiledOverlay:
     for key in EXCLUDE_KEYS:
         if key in top:
             data[key] = top[key]
+    for key in ("include_countries", "preferred_roles"):
+        if key in top:
+            data[key] = top[key]
     hint = _country_hint(ir, sections["search"])
     if hint:
         sections["search"]["query_suffix"] = hint
@@ -181,16 +178,21 @@ def compile_overlay(ir: CampaignIR) -> CompiledOverlay:
 
 def _not_applied(ir: CampaignIR, country_hint: str | None = None) -> list[NotApplied]:
     out: list[NotApplied] = []
+    if _is_set(get_value(ir, "audience.include_countries")):
+        # Applied, with one honest limit: a company whose country cannot be told from its page or domain is kept.
+        out.append(
+            NotApplied(
+                f"audience.include_countries = {get_value(ir, 'audience.include_countries')!r}",
+                "Applied: the Marketing Agent rejects a company it can place outside these countries (by the location "
+                "on its page or its country domain). A company whose country it cannot tell is kept, and noted."
+                + (f' The searches also lean that way ("{country_hint}").' if country_hint else ""),
+                None,
+                kind=PARTLY_APPLIED,
+            )
+        )
     for path, (reason, proposal) in _PROPOSALS.items():
         if path in REGISTRY and _is_set(get_value(ir, path)):
             request = f"{path} = {get_value(ir, path)!r}"
-            if path == "audience.include_countries" and country_hint:
-                reason = (
-                    f'Used only as a search hint: "{country_hint}" is added to every search query, so results lean '
-                    "that way. The Marketing Agent cannot yet reject companies outside the countries."
-                )
-                out.append(NotApplied(request, reason, proposal, kind=PARTLY_APPLIED))
-                continue
             out.append(NotApplied(request, reason, proposal))
     for item in ir.unsupported:
         out.append(NotApplied(item.request, item.reason, item.proposal, kind=item.kind))
@@ -220,6 +222,9 @@ def merge_onto_base(overlay: Mapping[str, Any], base: LeadgenFile) -> dict[str, 
             effective[section][key] = list(value) if isinstance(value, list) else value
     for key in EXCLUDE_KEYS:
         effective[key] = _union(effective[key], list(overlay.get(key) or []))
+    for key in ("include_countries", "preferred_roles"):
+        if overlay.get(key):
+            effective[key] = list(overlay[key])
     return effective
 
 

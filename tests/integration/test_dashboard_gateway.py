@@ -69,3 +69,20 @@ def test_pause_and_resume_and_the_status(gateway: Gateway, db: Database) -> None
         status["control"]["desired_state"] == "paused" and status["online"] is False
     )  # no heartbeat in a test database
     assert gateway.set_ca_state("running", "priya@example.com")["desired_state"] == "running"
+
+
+def test_the_workflow_status_and_the_list_as_the_dashboard_role(
+    gateway: Gateway, db: Database
+) -> None:
+    cid = new_campaign(db, detail="Find automotive companies that need Yocto help")
+    fresh = gateway.campaign(cid)
+    assert fresh["workflow_status"] == "RECEIVED" and fresh["execution"] is None
+    gateway.send_request(cid, "interpret", {}, None, "priya@example.com", "wf")
+    worker(db, COMPLETE_REPLY).run_once()
+    after = gateway.campaign(cid)
+    assert after["workflow_status"] in {"PENDING_CAMPAIGN_APPROVAL", "NEEDS_INPUT"}
+    listed = {c["campaign_id"]: c for c in gateway.campaigns(200)}
+    assert listed[cid]["workflow_status"] == after["workflow_status"]
+    with db.transaction() as conn:
+        conn.execute("update public.campaign set deleted_at = now() where id = %s", (cid,))
+    assert cid not in {c["campaign_id"] for c in gateway.campaigns(200)}

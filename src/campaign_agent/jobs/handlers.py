@@ -9,6 +9,7 @@ validation failure to fix, or the model being unavailable.
 """
 
 import json
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -48,8 +49,11 @@ from campaign_agent.merger.patch_merger import (
 from campaign_agent.questions.builder import answer_question
 from campaign_agent.questions.models import Answer
 from campaign_agent.research import Researcher
+from campaign_agent.research.brief import Brief, BriefWriter
 from campaign_agent.validators.downstream import Downstream
-from campaign_agent.view import LastRequest, ReviewView, build_view
+from campaign_agent.view import BriefItemView, BriefView, LastRequest, ReviewView, build_view
+
+log = logging.getLogger("campaign_agent.handlers")
 
 
 @dataclass(frozen=True)
@@ -95,6 +99,8 @@ class Services:
     ma_status: Callable[[], MaStatus | None] | None = None
     # Bounded concept research. None = switched off (the default): nothing is searched.
     researcher: Researcher | None = None
+    # The research brief on each new version under review (research/brief.py). None = switched off.
+    brief_writer: BriefWriter | None = None
 
 
 @dataclass(frozen=True)
@@ -447,7 +453,12 @@ def _refuse_unloadable_contract(svc: Services, contract_version: str) -> None:
 
 
 def _rollback(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
-    """Make a version that was approved before live again. Does not change the conversation."""
+    """Make a version that was approved before live again. Does not change the conversation. Like an approval it also
+    starts the Marketing Agent on it ("Make live" after a switch-off must bring the work back); `start_pipeline: false`
+    only makes it live."""
+    start_pipeline = req.payload.get("start_pipeline", True)
+    if not isinstance(start_pipeline, bool):
+        raise _fail(ErrorCode.INVALID_REQUEST, "start_pipeline must be true or false")
     version = req.payload.get("version")
     if not isinstance(version, int) or isinstance(version, bool):
         raise _fail(ErrorCode.INVALID_REQUEST, "send version (a number)")
@@ -464,7 +475,7 @@ def _rollback(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
     if match.live:
         t.extra["already"] = True
     else:
-        t.action = Action("activate", version)
+        t.action = Action("activate", version, start_pipeline=start_pipeline)
 
 
 def _deactivate(req: Request, ws: Workspace, t: _Turn, svc: Services) -> None:
@@ -539,7 +550,7 @@ def handle(req: Request, ws: Workspace, svc: Services) -> Outcome:
             conv = _model_down(ws.conv)
         t = _Turn(ir=ir, conv=conv, turn=ws.conv.turn, downstream=svc.downstream)
         t.warnings = []
-    return _outcome(req, ws, t, error)
+    return _outcome(req, ws, t, error, svc)
 
 
 _KEEPS_PREVIEW = frozenset({State.AWAITING_REVIEW, State.PUBLISHED, State.PUBLISH_FAILED})
@@ -565,7 +576,53 @@ def _check_revision(req: Request, ir: CampaignIR) -> None:
         )
 
 
-def _outcome(req: Request, ws: Workspace, t: _Turn, error: RequestError | None) -> Outcome:
+def _brief_view(brief: Brief, sha256: str) -> BriefView:
+    def items(found: tuple[Any, ...]) -> tuple[BriefItemView, ...]:
+        return tuple(BriefItemView(text=i.text, sources=i.sources) for i in found)
+
+    return BriefView(
+        for_sha256=sha256,
+        status=brief.status,
+        company_types=items(brief.company_types),
+        buying_signals=items(brief.buying_signals),
+        key_terms=items(brief.key_terms),
+        not_confirmed=brief.not_confirmed,
+        queries=brief.queries,
+        searched_at=brief.searched_at,
+    )
+
+
+def _brief(
+    svc: Services | None,
+    t: _Turn,
+    view: ReviewView,
+    prev: ReviewView | None,
+    error: RequestError | None,
+) -> BriefView | None:
+    """The brief for the version on screen: the one already written for it, or a new one for a version just frozen.
+    Never written for a refused request or an unvalidated candidate; research off means no brief."""
+    shown = view.candidate.sha256 if view.candidate else None
+    old = prev.brief if prev is not None else None
+    if shown is None:
+        return None
+    if old is not None and old.for_sha256 == shown:
+        return old
+    fresh = t.candidate is not None and t.candidate.can_freeze and t.candidate.sha256 == shown
+    if error is not None or not fresh or svc is None or svc.brief_writer is None:
+        return None
+    brief = svc.brief_writer.write(t.ir)
+    for note in brief.notes:
+        log.info("research brief note", extra={"note": note})
+    return _brief_view(brief, shown)
+
+
+def _outcome(
+    req: Request,
+    ws: Workspace,
+    t: _Turn,
+    error: RequestError | None,
+    svc: Services | None = None,
+) -> Outcome:
     not_applied: tuple[NotApplied, ...] = (
         t.candidate.not_applied if t.candidate else compile_overlay(t.ir).not_applied
     )
@@ -597,6 +654,7 @@ def _outcome(req: Request, ws: Workspace, t: _Turn, error: RequestError | None) 
     elif view.candidate is None and prev is not None and t.conv.state in _KEEPS_PREVIEW:
         # The version under review, or the one just published, stays on screen.
         view = view.model_copy(update={"candidate": prev.candidate})
+    view = view.model_copy(update={"brief": _brief(svc, t, view, prev, error)})
     frozen = t.candidate if (t.candidate and t.candidate.can_freeze and error is None) else None
     result: dict[str, Any] = {
         "state": t.conv.state.value,

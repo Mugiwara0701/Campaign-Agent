@@ -60,6 +60,18 @@ All child tables use `on delete cascade`.
 - CA: its own role `campaign_agent` (no service key), column-limited grants, explicit RLS policies. Created `nologin`; an admin sets the password.
 - Marketing Agent: read-only role. **Not defined yet**; its role name is needed (TODO in the migration).
 
+## Changes from the 2026-10-17 audit
+
+- `0025_version_insert_guard.sql`: the `campaign_agent` role may insert only the content columns of `campaign_version`,
+  and a trigger refuses any new version that arrives already approved. A version is approved only through `ca_publish()`.
+- `migrations/repeatable/`: applied by every `migrate`, after the numbered files, and never recorded. It holds the grants
+  that depend on the Marketing Agent's objects (`request_pipeline()`), so the order the two repositories are migrated in
+  no longer matters.
+- Marketing Agent `0014_approval_binding.sql`: approvals carry a hash of recipient, subject and body; decided emails are
+  frozen; expired approval requests cannot be decided; leads and emails record their campaign; `test_sent`.
+- Marketing Agent `0015_marketing_agent_role.sql` and dashboard `dashboardbackend/migrations/007_dashboard_backend_role.sql`:
+  limited logins for the Marketing Agent and the dashboard backend, which used the owner login before.
+
 ## Open points
 
 - **Schedule semantics.** The MA should run a campaign only when `is_active` is true, today is inside `start_date`–`end_date`, and an active version exists. This needs an MA change and allows overlapping campaigns; decide whether that is allowed in the first release or only one campaign may be live.

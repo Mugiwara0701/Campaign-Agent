@@ -189,12 +189,10 @@ def test_candidate_for_the_example_campaign() -> None:
         (6, "skipped"),
     ]
     assert len(c.not_applied) == 3
-    assert {n.proposal for n in c.not_applied} == {
-        "targeting.include_countries",
-        "targeting.employee_range",
-    }
+    assert {n.proposal for n in c.not_applied} == {None, "targeting.employee_range"}
     assert "approval" not in c.yaml
-    for forbidden in ("include_countries", "targeting", "employee", "500", "5000", "- US"):
+    assert "include_countries" in c.yaml  # applied by the Marketing Agent
+    for forbidden in ("targeting", "employee", "500", "5000"):
         assert forbidden not in c.yaml
     assert c.contract_version == "1.0"
     assert len(c.sha256) == len(c.effective_hash) == len(c.ir_hash) == 64

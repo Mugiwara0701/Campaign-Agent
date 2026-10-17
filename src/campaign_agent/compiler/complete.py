@@ -79,6 +79,10 @@ def merge_raw(overlay: dict[str, Any], base: dict[str, Any]) -> dict[str, Any]:
                 seen.add(_norm(item))
                 merged.append(item)
         effective[key] = merged
+    # Replaces, and is present only when the campaign sets it (the Marketing Agent's merge_overlay does the same).
+    for key in ("include_countries", "preferred_roles"):
+        if overlay.get(key):
+            effective[key] = list(overlay[key])
     return effective
 
 

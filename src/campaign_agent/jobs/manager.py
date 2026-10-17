@@ -51,6 +51,10 @@ _DB_REFUSALS = {
 }
 
 
+class LeaseLostError(Exception):
+    """Another worker took the request over (this one's lease ran out): this worker's result is not stored."""
+
+
 @dataclass(frozen=True)
 class ManagerConfig:
     worker_id: str
@@ -224,6 +228,22 @@ def refresh_applied(db: Database) -> bool:
         return True
 
 
+def reconcile_deleted(db: Database) -> list[str]:
+    """Switch off a live campaign the dashboard deleted. The dashboard asks for that itself after a delete, but only on a
+    best-effort call to the gateway; this makes sure a deleted campaign never keeps running. Returns the campaign ids."""
+    with db.transaction() as conn:
+        gone = repo.deleted_live_campaigns(conn)
+        for cid in gone:
+            repo.deactivate(conn, cid)
+        _refresh_superseded(conn, gone)
+    for cid in gone:
+        log.warning("a deleted campaign was still live: switched off", extra={"campaign_id": cid})
+    if gone:
+        note = stop_marketing_agent(db, "campaign-agent (the campaign was deleted)")
+        log.info("pipeline after switching off a deleted campaign", extra=note)
+    return gone
+
+
 def _run_action(conn: Conn, req: Request, action: Action) -> list[str]:
     """Change what is live. Returns the campaigns that stopped being live because of it."""
     if action.kind == "publish":
@@ -354,7 +374,12 @@ def process_next(db: Database, svc: Services, cfg: ManagerConfig) -> bool:
             if shown is not None:
                 repo.set_progress(conn, req.campaign_id, shown.value)
         outcome = handle(req, ws, svc)
-        outcome = _store_or_refuse(db, req, ws, outcome)
+        outcome = _store_or_refuse(db, req, ws, outcome, cfg.worker_id)
+    except LeaseLostError:
+        log.warning(
+            "request taken over by another worker; this result was not stored", extra=context
+        )
+        return True
     except Exception as exc:
         log.exception("request crashed", extra=context)
         try:
@@ -400,11 +425,13 @@ def process_next(db: Database, svc: Services, cfg: ManagerConfig) -> bool:
     return True
 
 
-def _store_or_refuse(db: Database, req: Request, ws: Workspace, outcome: Outcome) -> Outcome:
+def _store_or_refuse(
+    db: Database, req: Request, ws: Workspace, outcome: Outcome, worker_id: str | None = None
+) -> Outcome:
     """Store the outcome. If the database refuses the change of what is live, record that instead."""
     try:
         with db.transaction() as conn:
-            _store(conn, req, ws, outcome)
+            _store(conn, req, ws, outcome, worker_id)
         return outcome
     except psycopg.Error as exc:
         if outcome.action is None:
@@ -436,11 +463,15 @@ def _store_or_refuse(db: Database, req: Request, ws: Workspace, outcome: Outcome
             RequestError(code, detail),
         )
         with db.transaction() as conn:
-            _store(conn, req, ws, refused)
+            _store(conn, req, ws, refused, worker_id)
         return refused
 
 
-def _store(conn: Conn, req: Request, ws: Workspace, outcome: Outcome) -> None:
+def _store(
+    conn: Conn, req: Request, ws: Workspace, outcome: Outcome, worker_id: str | None = None
+) -> None:
+    if worker_id is not None and not repo.still_claimed(conn, req.id, worker_id):
+        raise LeaseLostError(req.id)
     current = repo.get_state(conn, req.campaign_id, lock=True)
     candidate_id = (
         str(current["candidate_version_id"])

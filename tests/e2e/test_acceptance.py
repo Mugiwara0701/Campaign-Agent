@@ -130,7 +130,7 @@ def test_what_cannot_be_applied_is_reported_and_not_emitted(db, tmp_path) -> Non
     assert "employee_max" in reported
     assert all(n.reason for n in view.not_applied)  # each one says why
     yaml_text = candidate_yaml(db, cid)
-    assert "employee" not in yaml_text and "include_countries" not in yaml_text
+    assert "employee" not in yaml_text and "include_countries" in yaml_text  # countries are applied
     stored = versions(db, cid)[0]["not_applied"]
     assert len(stored) == len(view.not_applied)  # the same list is stored with the version
     assert any(

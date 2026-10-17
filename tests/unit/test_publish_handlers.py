@@ -283,6 +283,24 @@ def test_an_earlier_approved_version_can_be_made_live_again() -> None:
     assert out.action is not None and (out.action.kind, out.action.version_no) == ("activate", 1)
     assert out.conv == ws.conv  # the conversation is untouched
     assert out.result["live_version"] == 1
+    assert (
+        out.action.start_pipeline is True
+    )  # "Make live" after a switch-off brings the Marketing Agent back
+
+
+def test_make_live_can_be_told_not_to_start_the_marketing_agent() -> None:
+    ws = published(VersionInfo(1, "a" * 64, True, False), VersionInfo(2, "b" * 64, True, True))
+    out = handle(request("rollback", {"version": 1, "start_pipeline": False}), ws, svc())
+    assert out.error is None and out.action is not None and out.action.start_pipeline is False
+
+
+def test_make_live_after_a_switch_off_starts_it_too() -> None:
+    ws = published(VersionInfo(1, "a" * 64, True, False))  # switched off: nothing is live
+    out = handle(request("rollback", {"version": 1}), ws, svc())
+    assert out.action is not None and (out.action.kind, out.action.start_pipeline) == (
+        "activate",
+        True,
+    )
 
 
 def test_a_version_that_is_already_live_is_a_repeat() -> None:
@@ -305,6 +323,7 @@ def test_a_version_that_was_never_approved_cannot_go_live() -> None:
         ({"version": 9}, ErrorCode.INVALID_REQUEST),
         ({}, ErrorCode.INVALID_REQUEST),
         ({"version": "1"}, ErrorCode.INVALID_REQUEST),
+        ({"version": 1, "start_pipeline": "yes"}, ErrorCode.INVALID_REQUEST),
     ],
 )
 def test_bad_rollback_requests(payload: dict[str, Any], code: ErrorCode) -> None:

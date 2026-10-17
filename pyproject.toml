@@ -17,6 +17,7 @@ dependencies = [
     "pydantic-settings>=2.2",
     "psycopg[binary]>=3.1",
     "uvicorn>=0.29",
+    "pyjwt[crypto]>=2.8",  # the gateway checks the signed-in dashboard user's token (api/users.py)
 ]
 
 [project.optional-dependencies]
@@ -29,6 +30,7 @@ dev = [
     "pip-audit>=2.7",
     "types-PyYAML",
     "pre-commit>=3.7",
+    "reportlab>=4.0",  # the PDF of the qa soak test (qa/make_report.py)
 ]
 
 [tool.setuptools.packages.find]
@@ -63,6 +65,8 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "PT018"]  # plain and compound asserts are fine in tests
+# The acceptance/soak suite drives real services: asserts, subprocess, urllib, SQL strings and swallowed errors are its job
+"qa/**" = ["S101", "S107", "S605", "SIM115", "SIM117", "B007", "S110", "S112", "S310", "S311", "S603", "S607", "S608", "S105", "S106", "PT018", "SIM105", "RET503", "RUF012"]
 
 [tool.ruff.format]
 quote-style = "double"

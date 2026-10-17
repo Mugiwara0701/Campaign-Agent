@@ -32,10 +32,45 @@ Every call except `/health` needs `Authorization: Bearer <API_TOKEN>`. Bodies an
 |---|---|
 | `GET /health` | Is the gateway up (no token, no database). |
 | `POST /v1/campaigns/{campaign_id}/requests` | Send a request. Returns `202` at once: `{"request_id", "status": "pending", "duplicate"}`. |
-| `GET /v1/campaigns/{campaign_id}` | What to show: `state`, `revision`, `review_view`, and the newest request (`last_request`). `state` is `NEW` before the CA has touched it. |
+| `GET /v1/campaigns` | The newest campaigns that are not deleted (`?limit=1..200`, default 50): `campaign_id`, `name`, `is_active`, dates, `state`, `workflow_status`, `error`, `live_version`. |
+| `GET /v1/campaigns/{campaign_id}` | What to show: `state`, `workflow_status`, `error`, `revision`, `review_view` (the proposal), the newest request (`last_request`) and `execution`. `state` is `NEW` before the CA has touched it. |
 | `GET /v1/requests/{request_id}` | One request: `status` (`pending`, `processing`, `done`, `failed`), `error_code`, `error_detail`, `result`. |
 | `GET /v1/ca` | `online` (heartbeat under a minute old), `status`, and `control` (`desired_state`, `actual_state`). |
 | `POST /v1/ca/state` | `{"state": "paused" or "running", "requested_by": "..."}`. Pausing the CA also stops the Marketing Agent. |
+
+### Workflow status
+
+`state` is the Campaign Agent's own review state. `workflow_status` is one answer across both agents, derived from what is
+stored (`src/campaign_agent/api/workflow.py`):
+
+| `workflow_status` | Meaning |
+|---|---|
+| `RECEIVED` | The campaign exists; the Campaign Agent has not started on it |
+| `RESEARCHING` | Reading the request, researching, compiling and validating a proposal |
+| `NEEDS_INPUT` | A question for the person, or validation needs a decision |
+| `CHANGES_REQUESTED` | The person asked for a change; a new version is being prepared |
+| `PENDING_CAMPAIGN_APPROVAL` | A validated version waits for approval (approve it by its `version` and `sha256`) |
+| `APPROVED` | Approved; being published |
+| `REJECTED` | Discarded before it was ever live |
+| `CONFIG_READY` | Live; the Marketing Agent has not confirmed this exact version yet |
+| `DELIVERED_TO_MA` | The Marketing Agent confirmed it runs this campaign id, version and sha256 |
+| `PROCESSING` | Delivered, and the Marketing Agent has found leads for it |
+| `FAILED` | A person must look: `error` says why (model down, publish failed, or the Marketing Agent refused the version) |
+| `CANCELLED` | It was live and is not any more (switched off, or replaced by another campaign) |
+
+There is no "completed": a campaign runs until it is switched off.
+
+`execution` (only once published): counts of the Marketing Agent's leads by lead status and emails by email status for this
+campaign, e.g. `{"leads": {"QUALIFIED": 4, "SENT": 1}, "emails": {"drafted": 2, "sent": 1}}`. Counts only, no names or
+addresses. `null` until `migrations/repeatable/ma_campaign_progress.sql` could be applied (it needs the Marketing Agent's
+migration 0014).
+
+### The research brief
+
+With research on (`RESEARCH_ENABLED=true` on the CA machine), `review_view.brief` holds the research brief on the
+version under review: `status`, `company_types`, `buying_signals`, `key_terms` (each `{text, sources}`), `not_confirmed`,
+`for_sha256` (the version it belongs to), `queries`, `searched_at`. Show it next to the proposal, with its links; it is
+`null` when research is off or no version is ready. Details: [research.md](research.md#the-research-brief-on-a-proposal-researchbriefpy).
 
 ### Send a request
 
@@ -76,6 +111,23 @@ export async function startCampaign(campaignId, userEmail) {
   return r.json();                                    // { request_id, status: "pending", duplicate }
 }
 ```
+
+## Who asked: the signed-in person's own token
+
+`API_TOKEN` proves the caller is the dashboard's server, not which person clicked. The dashboard's server therefore also
+forwards the person's Supabase access token in `X-User-Token` (`dashboard/core/server/caGateway.js`). The gateway
+(`src/campaign_agent/api/users.py`) checks its signature, expiry and audience, and then:
+
+- records the person's email as `requested_by` (the approval record), whatever the body says;
+- lets only an `admin` send a campaign request or resume the agent; anyone signed in may pause it.
+
+| Setting | |
+|---|---|
+| `API_SUPABASE_URL` | the dashboard's Supabase URL (its signing keys are read from `/auth/v1/.well-known/jwks.json`) |
+| `API_SUPABASE_JWT_SECRET` | only for a project still on the legacy shared HS256 secret |
+| `API_REQUIRE_USER` | `true`: a request without a valid user token is refused (401). Turn it on once the dashboard forwards the token |
+
+A token that is sent is always checked, even while `API_REQUIRE_USER` is off.
 
 ## Put it on Render (one time)
 

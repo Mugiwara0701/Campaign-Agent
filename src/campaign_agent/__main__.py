@@ -116,7 +116,26 @@ def _api(settings: Settings) -> int:
             file=sys.stderr,
         )
         return 2
-    app = create_app(Gateway(settings.api_database_url.get_secret_value()), token=token)
+    from campaign_agent.api.users import UserVerifier
+
+    secret = settings.api_supabase_jwt_secret
+    users = (
+        UserVerifier(settings.api_supabase_url, secret.get_secret_value() if secret else None)
+        if settings.api_supabase_url or secret
+        else None
+    )
+    if settings.api_require_user and users is None:
+        print(
+            "API_REQUIRE_USER needs API_SUPABASE_URL (or API_SUPABASE_JWT_SECRET) to check user tokens",
+            file=sys.stderr,
+        )
+        return 2
+    app = create_app(
+        Gateway(settings.api_database_url.get_secret_value()),
+        token=token,
+        users=users,
+        require_user=settings.api_require_user,
+    )
     uvicorn.run(
         app,
         host="0.0.0.0",  # noqa: S104
@@ -175,7 +194,7 @@ def _serve(command: str, settings: Settings) -> int:
     from campaign_agent.llm.adapter import GenParams
     from campaign_agent.logs import setup_logging
     from campaign_agent.ma_status import MaStatus, fetch_status
-    from campaign_agent.research.factory import build_researcher
+    from campaign_agent.research.factory import build_brief_writer, build_researcher
     from campaign_agent.store.db import Database
     from campaign_agent.validators.downstream import Downstream
 
@@ -213,6 +232,7 @@ def _serve(command: str, settings: Settings) -> int:
             downstream=downstream,
             ma_status=ma_status,
             researcher=build_researcher(settings, extractor_adapter),
+            brief_writer=build_brief_writer(settings, extractor_adapter),
         ),
         cfg,
         model_name=settings.llm_model,
