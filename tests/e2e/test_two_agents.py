@@ -116,7 +116,9 @@ def _status(db: Database, cid: str) -> str:
             "order by created_at desc limit 1",
             (cid,),
         ).fetchone()
-    return workflow_status(row["current_state"], row["review_view"], dict(last) if last else None)[0]
+    return workflow_status(row["current_state"], row["review_view"], dict(last) if last else None)[
+        0
+    ]
 
 
 def _events(db: Database, cid: str, code: str) -> list[dict[str, Any]]:
@@ -144,11 +146,24 @@ def test_both_agents_from_request_to_one_sent_email(
     assert first is not None and first.version == 1
 
     # Nothing approved: the link serves nothing.
-    assert httpx.get(f"{link}/campaign/active", headers={"Authorization": f"Bearer {TOKEN}"}).status_code == 204
+    assert (
+        httpx.get(
+            f"{link}/campaign/active", headers={"Authorization": f"Bearer {TOKEN}"}
+        ).status_code
+        == 204
+    )
     assert httpx.get(f"{link}/campaign/active").status_code == 401
 
     # Phase C: an edit makes a new version; approving the old one is refused as stale.
-    edited = send(db, w, cid, "edit", "e1", {"text": "Skip anyone in France"}, base=state_row(db, cid)["revision"])
+    edited = send(
+        db,
+        w,
+        cid,
+        "edit",
+        "e1",
+        {"text": "Skip anyone in France"},
+        base=state_row(db, cid)["revision"],
+    )
     assert edited["status"] == "done"
     second = view_of(db, cid).candidate
     assert second is not None and second.version == 2 and second.sha256 != first.sha256
@@ -175,7 +190,10 @@ def test_both_agents_from_request_to_one_sent_email(
     assert out["lead_status"] in {"PENDING_APPROVAL", "EMAIL_DRAFTED"}, out
     assert out["email_status_before"] == "drafted"
     assert out["sent_before_approval"] == 0  # not approved yet
-    assert out["decisions"] == ["approved", "already_decided"]  # a repeated Slack click changes nothing
+    assert out["decisions"] == [
+        "approved",
+        "already_decided",
+    ]  # a repeated Slack click changes nothing
     assert out["sent_other_campaign_live"] == 0  # another campaign live: it waits
     assert out["sent"] == [1, 0]  # exactly once
     assert out["email_status_after"] == "sent" and out["outbox_files"] == 1
