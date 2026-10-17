@@ -110,16 +110,24 @@ is told not to name companies, and the reviewer sees the sources. The brief desc
 
 ## Turning it on
 
-On the office machine, in `.env`:
+Use **our own** SearXNG instance, on the Campaign Agent machine: `deploy/searxng/` (Docker compose, JSON output, bound
+to localhost). It must not be shared with the Marketing Agent, so a CAPTCHA or a block on one does not stop the other.
+Docker needs the machine's administrator (the `campaign-agent` account has no sudo), once:
+
+```bash
+sudo apt-get install -y docker.io docker-compose-v2
+cd /home/<campaign-agent user>/Desktop/Campaign-Agent/deploy/searxng
+echo "SEARXNG_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(32))')" | sudo tee .env >/dev/null
+sudo docker compose up -d
+curl -s "http://127.0.0.1:8888/search?q=test&format=json" | head -c 200   # JSON back = it works
+```
+
+Then in the Campaign Agent's `.env` (`bash deploy/remote.sh push-env`), and restart it (`bash deploy/remote.sh up`):
 
 ```text
 RESEARCH_ENABLED=true
-SEARXNG_URL=http://127.0.0.1:8080
-```
-
-Use **our own** SearXNG instance, on the Campaign Agent machine. The Marketing Agent's `deploy/searxng/` (a Docker compose
-file with JSON output enabled, bound to localhost) is the template; it must not be shared with the Marketing Agent, so a
-CAPTCHA or a block on one does not stop the other. Optional: `RESEARCH_ALLOW_DOMAINS`, `RESEARCH_DENY_DOMAINS`
+SEARXNG_URL=http://127.0.0.1:8888
+``` Optional: `RESEARCH_ALLOW_DOMAINS`, `RESEARCH_DENY_DOMAINS`
 (comma-separated), `RESEARCH_TIMEOUT_S`.
 
 ## Whether it is worth it
