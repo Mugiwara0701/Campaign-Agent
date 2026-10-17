@@ -74,7 +74,7 @@ Statuses: **PASS** implemented and verified by a test that ran in CI; **PARTIAL*
 | INT-03 | Both | Authentication | PASS | Two-agent test: request without a token → 401; CA link tests (token rollover) | — |
 | INT-04 | Both | Timeouts, retries, acknowledgement, duplicates | PASS | MA link client: `MA_LINK_TIMEOUT_S`, outbox with bounded backoff; events idempotent; two-agent test (pickup twice, one event) | — |
 | INT-05 | Both | Recovery from interruptions | PASS (local) | Approved while the MA was not running → delivered when it ran; MA restart → resumes, no duplicates; CA `test_acceptance.py::test_published_while_the_marketing_agent_is_offline_is_applied_when_it_returns` | Real network interruption on Tailscale not exercised |
-| INT-06 | Both | Real Tailscale between two machines | BLOCKED | Setup documented (`docs/tailscale-setup.md`, `docs/ca-ma-link.md`) | Needs the office machines and the link settings (F-01) |
+| INT-06 | Both | Real Tailscale between two machines | PARTIAL | Setup documented (`docs/tailscale-setup.md`, `docs/ca-ma-link.md`) | Link verified on the office machines on 2026-10-17 (health, 204, 401; section after E). A full campaign over it not yet run |
 | INT-07 | Dashboard ↔ CA | Contract compatibility | PARTIAL | CA side tested; the dashboard's `core/server/caGateway.js` calls these same endpoints (read on the laptop) | The dashboard repository was not run or tested; its fixes from the earlier session are not committed or deployed |
 
 ---
@@ -150,6 +150,24 @@ Negative cases:
 | MA | `829d66e` (that line fixed) | **all checks pass**: ci 39023367598, lint 39023367614, security 39023367499 |
 | CA | `8b47795` (contact roles) | **all checks pass**, including the real MA accepting `preferred_roles` (run 39024096654) |
 | MA | `ad7b216` (Slack endpoint tests, shown-card binding, contact roles) | **all checks pass**: ci 39024330247 (Python, PostgreSQL), lint 39024330209 (ruff, mypy, Deno format, lint and tests), security 39024330311 |
+
+## Deployment on 2026-10-17 (after this report, at the owner's request)
+
+| Step | Result |
+|---|---|
+| MA pipeline stopped (it was running a pass on the old code) | `desired_state` and `actual_state` = `stopped` |
+| The pass's one open draft (Castles Technology) skipped | `decide_email(..., false)`: email `skipped`, lead `REJECTED`; its Slack card answers "Already decided" |
+| All campaigns cleared (dashboard `campaign` rows and every CA table; MA leads and email history kept) | Before: 1 campaign, 10 requests, 2 versions, 1 state, 117 MA events; after: 0. Backup (CSV per table): `~/backups/campaigns-20261017-155623/` on the MA machine |
+| MA migrations | `0014_approval_binding`, `0015_marketing_agent_role`, `0016_approval_shown_content` applied |
+| MA code | `fix/audit-findings` deployed (`remote.sh deps`, `up`; `dnspython` installed); service running, pipeline stopped |
+| CA migrations | `0025_version_insert_guard`, repeatable `ma_campaign_progress`, `ma_pipeline_grants` applied |
+| CA code | `fix/audit-findings` deployed (`remote.sh deploy`; `pyjwt` installed); worker running, link listening on the Tailscale address |
+| **Real two-machine link** (INT-06) | From the MA machine over Tailscale: `/ma/v1/health` → `ok`; `/campaign/active` → 204 (nothing live); without the token → 401 |
+
+Not deployed: the `slack-interact` Edge Function (needs the Supabase CLI and project access; until redeployed, Slack shows
+"Approved by ..." for a card that was in fact `expired` or `changed`, while nothing is decided), the dashboard and its
+migration 007, and the gateway on Render (deploys from its own branch setting). The CA office window (`campaign_agent ui`)
+still runs the code it started with until it is reopened.
 
 ## F. Remaining blockers
 
