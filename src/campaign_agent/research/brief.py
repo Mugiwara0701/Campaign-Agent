@@ -36,8 +36,11 @@ from campaign_agent.research.search_client import SearchClient, SearchError
 log = logging.getLogger("campaign_agent.research.brief")
 
 MAX_SEARCHES = 4
-MAX_FETCHES = 6
+MAX_FETCHES = 4
 PAGES_PER_QUERY = 2
+# Characters of each page the model reads. A CPU-only 9B model took over 10 minutes on 6 pages of 4,000 characters
+# (2026-10-17, on the CA machine); 4 pages of 1,500 keep the prompt to about a quarter of that.
+PAGE_CHARS = 1500
 MAX_ITEMS = 5
 SECTIONS = ("company_types", "buying_signals", "key_terms")
 Section = Literal["company_types", "buying_signals", "key_terms"]
@@ -197,7 +200,9 @@ def user_prompt(ir: CampaignIR, pages: list[Page]) -> str:
         )
         if values
     )
-    body = "\n".join(f'<page url="{p.url}">\n{_clean_page_text(p.text)}\n</page>' for p in pages)
+    body = "\n".join(
+        f'<page url="{p.url}">\n{_clean_page_text(p.text)[:PAGE_CHARS]}\n</page>' for p in pages
+    )
     return f"<campaign>{targeting}</campaign>\n\n<pages>\n{body}\n</pages>"
 
 
@@ -225,7 +230,7 @@ class BriefWriter:
         self._search = search
         self._fetcher = fetcher
         self._adapter = adapter
-        self._params = params or GenParams(max_tokens=1200)
+        self._params = params or GenParams(max_tokens=700)
         self._clock = clock
 
     def write(self, ir: CampaignIR) -> Brief:

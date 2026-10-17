@@ -238,3 +238,10 @@ def test_the_try_client_prints_the_brief_with_its_sources() -> None:
     text = "\n".join(format_brief(out.view.brief))
     assert "Company types: Makers of in-vehicle infotainment units" in text and URL0 in text
     assert "Not confirmed: typical project budgets" in text
+
+
+def test_the_model_reads_only_the_start_of_each_page() -> None:
+    from campaign_agent.research.brief import PAGE_CHARS, user_prompt
+
+    prompt = user_prompt(IR, [Page(URL0, "a" * 10_000)])
+    assert prompt.count("a" * PAGE_CHARS) == 1 and "a" * (PAGE_CHARS + 1) not in prompt

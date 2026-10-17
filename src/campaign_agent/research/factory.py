@@ -56,5 +56,5 @@ def build_brief_writer(settings: Settings, adapter: LLMAdapter) -> BriefWriter |
         SearxngClient(settings.searxng_url, domains, timeout_s=settings.research_timeout_s),
         PageFetcher(domains, timeout_s=settings.research_timeout_s),
         adapter,
-        GenParams(timeout_s=settings.llm_timeout_s, max_tokens=1200),
+        GenParams(timeout_s=settings.research_brief_timeout_s, max_tokens=700),
     )
