@@ -5,6 +5,7 @@ Campaign Agent worker (the same rows the dashboard writes); nothing here bypasse
 Campaigns made here are named "[CA-TEST] ..." like the dev client's, so `try --clean` removes them.
 """
 
+import getpass
 import uuid
 from typing import Any
 
@@ -29,18 +30,38 @@ def short_name(text: str, limit: int = 60) -> str:
     return (cut or text[:limit]) + "..."
 
 
+def operator() -> str:
+    """Who is at the keyboard of the office machine, for the approval record."""
+    try:
+        return getpass.getuser()
+    except Exception:  # no user name in this environment
+        return "unknown"
+
+
 def _enqueue(
     db: Database,
     campaign_id: str,
     kind: str,
     payload: dict[str, Any] | None = None,
     base_revision: int | None = None,
+    requested_by: str = REQUESTED_BY,
 ) -> None:
+    """The window works only on its own [CA-TEST] campaigns: a real campaign is changed and approved on the dashboard,
+    where every request carries the signed-in person (audit 2026-10-17, F-13)."""
     with db.transaction() as conn:
+        row = conn.execute(
+            "select campaign_name from public.campaign where id = %s", (campaign_id,)
+        ).fetchone()
+        if row is None:
+            raise LookupError("no such campaign")
+        if not str(row["campaign_name"] or "").startswith(TEST_PREFIX):
+            raise ValueError(
+                "the office window works only on its own test campaigns; use the dashboard for this one"
+            )
         repo.enqueue_request(
             conn,
             repo.NewRequest(
-                campaign_id, kind, REQUESTED_BY, uuid.uuid4().hex, payload or {}, base_revision
+                campaign_id, kind, requested_by, uuid.uuid4().hex, payload or {}, base_revision
             ),
         )
 
@@ -175,6 +196,7 @@ def approve(db: Database, campaign_id: str, start_pipeline: bool = False) -> Non
             "sha256": view.candidate.sha256,
             "start_pipeline": start_pipeline,
         },
+        requested_by=f"{REQUESTED_BY} ({operator()})"[:100],
     )
 
 

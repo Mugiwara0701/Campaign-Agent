@@ -118,6 +118,17 @@ def check_business_rules(
                 severity="warning",
             )
         )
+    excluded = {_norm(x) for x in effective.get("exclude_countries") or []}
+    clash = sorted(c for c in effective.get("include_countries") or [] if _norm(c) in excluded)
+    if clash:
+        issues.append(
+            Issue(
+                LEVEL,
+                "country_included_and_excluded",
+                "include_countries",
+                f"these countries are both wanted and excluded (the exclusion wins): {clash}",
+            )
+        )
     project = effective["project_context"]
     if not any(
         project[k] for k in ("industries", "products", "technologies", "engineering_requirements")

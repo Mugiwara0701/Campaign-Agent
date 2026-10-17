@@ -123,6 +123,27 @@ def claim_request(conn: Conn, worker_id: str, lease_seconds: int) -> Row | None:
     return conn.execute(_CLAIM, (worker_id, lease_seconds)).fetchone()
 
 
+def renew_lease(conn: Conn, worker_id: str, lease_seconds: int) -> int:
+    """Extend the lease of the request this worker is running (called by its heartbeat), so a slow model call never lets
+    another worker take the request over. Returns how many leases were extended."""
+    return conn.execute(
+        """
+        update public.campaign_request set lease_until = now() + make_interval(secs => %s)
+        where claimed_by = %s and status = 'processing'
+        """,
+        (lease_seconds, worker_id),
+    ).rowcount
+
+
+def still_claimed(conn: Conn, request_id: str, worker_id: str) -> bool:
+    """Is this request still being worked on by this worker? Locks the row until the transaction ends."""
+    row = conn.execute(
+        "select status, claimed_by from public.campaign_request where id = %s for update",
+        (request_id,),
+    ).fetchone()
+    return row is not None and row["status"] == "processing" and row["claimed_by"] == worker_id
+
+
 def complete_request(conn: Conn, request_id: str, result: dict[str, Any]) -> None:
     conn.execute(
         """
@@ -492,10 +513,23 @@ def live_version_for_ma(conn: Conn, respect_schedule: bool = False) -> Row | Non
         join public.campaign_version v on v.id = s.active_version_id
         join public.campaign c on c.id = s.campaign_id
         where v.approved_at is not null
+          and c.deleted_at is null
           and (not %s or (c.is_active and current_date between c.start_date and c.end_date))
         """,
         (respect_schedule,),
     ).fetchone()
+
+
+def deleted_live_campaigns(conn: Conn) -> list[str]:
+    """Campaigns the dashboard deleted (soft delete) that are still live here: its own `deactivate` request was lost."""
+    rows = conn.execute(
+        """
+        select s.campaign_id from public.campaign_state s
+        join public.campaign c on c.id = s.campaign_id
+        where s.active_version_id is not null and c.deleted_at is not null
+        """
+    ).fetchall()
+    return [str(r["campaign_id"]) for r in rows]
 
 
 def store_event(

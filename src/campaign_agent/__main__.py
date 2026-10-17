@@ -116,7 +116,26 @@ def _api(settings: Settings) -> int:
             file=sys.stderr,
         )
         return 2
-    app = create_app(Gateway(settings.api_database_url.get_secret_value()), token=token)
+    from campaign_agent.api.users import UserVerifier
+
+    secret = settings.api_supabase_jwt_secret
+    users = (
+        UserVerifier(settings.api_supabase_url, secret.get_secret_value() if secret else None)
+        if settings.api_supabase_url or secret
+        else None
+    )
+    if settings.api_require_user and users is None:
+        print(
+            "API_REQUIRE_USER needs API_SUPABASE_URL (or API_SUPABASE_JWT_SECRET) to check user tokens",
+            file=sys.stderr,
+        )
+        return 2
+    app = create_app(
+        Gateway(settings.api_database_url.get_secret_value()),
+        token=token,
+        users=users,
+        require_user=settings.api_require_user,
+    )
     uvicorn.run(
         app,
         host="0.0.0.0",  # noqa: S104

@@ -34,7 +34,8 @@ def load_ma_env(ctx: Ctx) -> None:
 def run_agent(ctx: Ctx, *args: str, timeout: float = 300) -> subprocess.CompletedProcess[str]:
     """`python -m agent <args>` in the Marketing Agent's folder, with its settings."""
     # The CPU model needs minutes for one answer; the leadgen commands set this themselves, the others do not.
-    env = {"LLM_MIN_TIMEOUT": "420", **os.environ, **ctx.env}
+    # MA_ON_OFFICE_MACHINE: the qa suite runs on the Marketing Agent machine itself (qa/run.sh deploys it there).
+    env = {"LLM_MIN_TIMEOUT": "420", **os.environ, **ctx.env, "MA_ON_OFFICE_MACHINE": "1"}
     return subprocess.run(
         [str(MA_DIR / ".venv" / "bin" / "python"), "-m", "agent", *args],
         cwd=MA_DIR,

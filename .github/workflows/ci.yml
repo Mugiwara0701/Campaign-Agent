@@ -91,6 +91,53 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest --cov --cov-report=term-missing
 
+  contract-ma:
+    # Level 6 against the real Marketing Agent, not the stand-in in tests/e2e/fake_ma (audit 2026-10-17, F-03, F-25).
+    # The MA branch: the repository variable MA_REF when set, else the branch with the same name as this one when the MA
+    # has it (a change made in both repositories is tested together), else main.
+    name: Contract with the real Marketing Agent
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pick the Marketing Agent branch
+        id: ma
+        env:
+          MA_REF: ${{ vars.MA_REF }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          ref="${MA_REF:-}"
+          if [ -z "$ref" ]; then
+            if git ls-remote --exit-code --heads https://github.com/Mugiwara0701/Marketing-AI-Agent.git "$BRANCH" >/dev/null; then
+              ref="$BRANCH"
+            else
+              ref=main
+            fi
+          fi
+          echo "Marketing Agent branch: $ref"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: Mugiwara0701/Marketing-AI-Agent
+          ref: ${{ steps.ma.outputs.ref }}
+          path: marketing-agent
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            marketing-agent/requirements.txt
+      - run: pip install -e ".[dev]"
+      - name: The Marketing Agent in its own virtual environment, as on its machine
+        working-directory: marketing-agent
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -r requirements.txt
+      - run: pytest tests/e2e/test_real_ma.py -v
+        env:
+          REAL_MA_CHECKOUT: ${{ github.workspace }}/marketing-agent
+          REAL_MA_PYTHON: ${{ github.workspace }}/marketing-agent/.venv/bin/python
+
   scripts:
     name: Shell scripts
     runs-on: ubuntu-latest

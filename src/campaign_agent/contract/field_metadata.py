@@ -125,6 +125,11 @@ METADATA: dict[str, FieldMeta] = {
     "exclude_tlds": _c(
         ("pipeline.py", "qualify.py"), "Extra excluded domain endings, added to the base list."
     ),
+    "include_countries": _c(
+        ("qualify.py", "pipeline.py", "intent.py"),
+        "Only companies in these countries: one placed elsewhere (by the location on its page or its country "
+        "domain) is rejected. Replaces; empty means any country that is not excluded.",
+    ),
     # contacts (base)
     "contacts.max_pages": _b(("contacts.py",), "Pages read on a company's own site."),
     "contacts.max_attempts": _b(("pipeline.py",), "Contact attempts before a lead is rejected."),

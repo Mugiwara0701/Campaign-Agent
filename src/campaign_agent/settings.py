@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     # to the database as the limited `campaign_dashboard` role (never the owner) and checks one shared token (32+ characters).
     api_database_url: SecretStr | None = None
     api_token: SecretStr | None = None
+    # The signed-in person behind each request (api/users.py): the Supabase project URL (its signing keys), or the
+    # legacy shared JWT secret. API_REQUIRE_USER=true refuses requests that carry no valid user token.
+    api_supabase_url: str | None = None
+    api_supabase_jwt_secret: SecretStr | None = None
+    api_require_user: bool = False
     # The direct link to the Marketing Agent over Tailscale (docs/ca-ma-link.md). Off unless switched on.
     ma_link_enabled: bool = False
     # "tailscale" = this machine's Tailscale address (found when the listener starts); or one literal address.

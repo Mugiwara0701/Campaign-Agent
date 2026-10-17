@@ -89,6 +89,7 @@ def test_stop_does_not_wait_for_a_heartbeat_stuck_in_a_network_call(monkeypatch:
     monkeypatch.setattr(
         worker_module, "refresh_applied", lambda db: None
     )  # an idle cycle looks at the MA's report
+    monkeypatch.setattr(worker_module, "reconcile_deleted", lambda db: [])
     monkeypatch.setattr(worker_module.repo, "beat", lambda conn, **kw: None)
     w = Worker(_Db(), None, _RunCfg(), model_name="m", poll_interval_s=0.01)  # type: ignore[arg-type]
     w._db = type("Main", (_Db,), {"clone": lambda self: StuckDb()})()  # type: ignore[assignment]
@@ -196,6 +197,7 @@ def _worker_with(
     monkeypatch.setattr(worker_module.repo, "beat", lambda conn, **kw: None)
     monkeypatch.setattr(worker_module, "process_next", lambda db, svc, cfg: False)
     monkeypatch.setattr(worker_module, "refresh_applied", lambda db: None)
+    monkeypatch.setattr(worker_module, "reconcile_deleted", lambda db: [])
     return Worker(
         _Db(), None, None, model_name="m", poll_interval_s=0.01, clock=clock or time.monotonic
     )  # type: ignore[arg-type]
@@ -277,6 +279,7 @@ def _idle_worker(
     monkeypatch.setattr(worker_module.repo, "beat", lambda conn, **kw: None)
     monkeypatch.setattr(worker_module, "process_next", lambda db, svc, cfg: False)
     monkeypatch.setattr(worker_module, "refresh_applied", lambda db: None)
+    monkeypatch.setattr(worker_module, "reconcile_deleted", lambda db: [])
     w = Worker(_Db(), None, _Cfg(), model_name="m", poll_interval_s=0.01, clock=lambda: now["t"])  # type: ignore[arg-type]
     return w, calls
 

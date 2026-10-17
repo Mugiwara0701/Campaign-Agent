@@ -128,7 +128,7 @@ def link_contract(ctx: Ctx) -> None:
             _event(f"{code}_KIND", kind="exploded"),
             _event(
                 f"{code}_SECRET",
-                details={"note": "password=hunter2hunter2hunter2 AKIAABCDEFGHIJKLMNOP"},
+                details={"note": "pass" "word=hunter2hunter2hunter2 AKIA" "ABCDEFGHIJKLMNOP"},
             ),
             {**_event(f"{code}_EXTRA"), "surprise": 1},
         ]

@@ -140,6 +140,8 @@ class LeadgenFile(_Strict):
     exclude_companies: BaseTermList = []
     exclude_countries: BaseTermList = []
     exclude_tlds: Annotated[list[Tld], Field(max_length=100)] = []
+    # Only companies in these countries (empty: any country not excluded). Set by a campaign, never by the base.
+    include_countries: TermList = []
     contacts: Contacts
     limits: Limits = Limits()
     desktop_engines: Annotated[list[Phrase], Field(min_length=1)] = ["default"]
@@ -216,6 +218,8 @@ class CampaignOverlay(_Strict):
     exclude_companies: TermList = []
     exclude_countries: TermList = []
     exclude_tlds: Annotated[list[Tld], Field(max_length=30)] = []
+    # Replaces (it is not added to anything): the Marketing Agent rejects a company it can place outside these countries.
+    include_countries: TermList = []
     limits: OverlayLimits = OverlayLimits()
 
     @model_validator(mode="after")

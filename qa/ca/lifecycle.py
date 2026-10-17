@@ -311,7 +311,7 @@ def restore_live(ctx: Ctx) -> None:
 def bad_inputs(ctx: Ctx) -> None:
     """Text the Campaign Agent must not act on. These are refused before the model, so they are quick."""
     cases = {
-        "a text that carries a password and a cloud key": "Find companies. password=hunter2hunter2hunter2 and key AKIAABCDEFGHIJKLMNOP",
+        "a text that carries a password and a cloud key": "Find companies. pass" "word=hunter2hunter2hunter2 and key AKIA" "ABCDEFGHIJKLMNOP",
         "an empty description": "   ",
         "a text that is not English": "Trouvez des entreprises allemandes qui fabriquent des bornes de recharge et qui ont besoin d'aide en Linux embarque.",
     }

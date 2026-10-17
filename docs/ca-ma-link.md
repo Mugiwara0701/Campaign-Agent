@@ -384,6 +384,21 @@ real checks run on the office machines through `deploy/remote.sh`.
 6. **Several MA machines later.** One token per MA and a per-machine tag would be needed; not designed here.
 7. **Dependence on Tailscale's service.** Acceptable for now; Headscale (self-hosted) is the exit if it stops being free.
 
+## 13a. Changes from the 2026-10-17 audit
+
+- **The Marketing Agent runs only an approved campaign.** With nothing live, no link configured, or the CA unreachable and
+  no cached campaign, a discovery pass is skipped (`MA_NO_CAMPAIGN` blocker). `MA_REQUIRE_CAMPAIGN=false` on the MA
+  restores the old fallback to its base config.
+- **Leads remember their campaign.** New leads and their emails carry `source_campaign_id` / `source_campaign_version`;
+  an approved email or follow-up of a campaign that is not live waits (it is not failed).
+- **`include_countries`** is a top-level campaign key (it replaces; present only when set). The MA rejects a company its
+  page or country domain places elsewhere and keeps, with a note, one whose country it cannot tell. Deploy the MA
+  first: an older MA refuses a campaign with this key ("a campaign may not set this key").
+- **Level 6 is real.** The MA now has `python -m agent leads queries --campaign FILE` (no database, no network), and CI
+  runs level 6 against a checkout of the real MA (`tests/e2e/test_real_ma.py`, job "Contract with the real Marketing
+  Agent"). Set `MA_REQUIRED=true` on the CA so nothing is approved that the MA's loader has not accepted.
+- **A deleted campaign is never served** (`campaign.deleted_at`), and the worker switches it off if it was live.
+
 ## 14. Settings
 
 On the CA machine (`.env`, sent with `bash deploy/remote.sh push-env`; apply migration `0017` first with `deploy/remote.sh migrate`):

@@ -88,18 +88,17 @@ def test_unsupported_requests_are_reported_not_dropped() -> None:
     )
     result = compile_overlay(ir)
     proposals = {n.proposal for n in result.not_applied}
-    assert {
-        "targeting.include_countries",
-        "targeting.employee_range",
-        "contacts.preferred_roles",
-    } <= proposals
+    assert {"targeting.employee_range", "contacts.preferred_roles"} <= proposals
+    assert "targeting.include_countries" not in proposals  # countries are applied now
     text = str(result.data)
     assert "cto" not in text
     assert "employee" not in text
-    # the countries are used only as a search hint, and that is said, never presented as a filter
+    # the countries are enforced by the Marketing Agent, and the searches lean that way too
+    assert result.data["include_countries"] == ["US"]
     assert result.data["search"] == {"query_suffix": "US"}
-    countries = next(n for n in result.not_applied if n.proposal == "targeting.include_countries")
-    assert countries.kind == "partially_applied" and "search hint" in countries.reason
+    countries = next(n for n in result.not_applied if n.request.startswith("audience.include_countries"))
+    assert countries.kind == "partially_applied" and countries.reason.startswith("Applied")
+    assert "cannot tell is kept" in countries.reason  # the one limit is said
 
 
 def test_compile_is_pure_and_repeatable() -> None:
@@ -188,10 +187,9 @@ def test_a_search_suffix_the_user_set_is_never_replaced_by_the_countries() -> No
         ir_with(("limits.query_suffix", "EV charging"), ("audience.include_countries", ["Germany"]))
     )
     assert result.data["search"]["query_suffix"] == "EV charging"
-    note = next(n for n in result.not_applied if n.proposal == "targeting.include_countries")
-    assert (
-        note.kind == "unsupported_field"
-    )  # not applied at all: it must not claim a hint that was not written
+    assert result.data["include_countries"] == ["Germany"]
+    note = next(n for n in result.not_applied if n.request.startswith("audience.include_countries"))
+    assert "lean that way" not in note.reason  # it must not claim a hint that was not written
 
 
 def test_no_countries_means_no_hint() -> None:

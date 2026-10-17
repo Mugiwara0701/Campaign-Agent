@@ -77,6 +77,23 @@ export async function startCampaign(campaignId, userEmail) {
 }
 ```
 
+## Who asked: the signed-in person's own token
+
+`API_TOKEN` proves the caller is the dashboard's server, not which person clicked. The dashboard's server therefore also
+forwards the person's Supabase access token in `X-User-Token` (`dashboard/core/server/caGateway.js`). The gateway
+(`src/campaign_agent/api/users.py`) checks its signature, expiry and audience, and then:
+
+- records the person's email as `requested_by` (the approval record), whatever the body says;
+- lets only an `admin` send a campaign request or resume the agent; anyone signed in may pause it.
+
+| Setting | |
+|---|---|
+| `API_SUPABASE_URL` | the dashboard's Supabase URL (its signing keys are read from `/auth/v1/.well-known/jwks.json`) |
+| `API_SUPABASE_JWT_SECRET` | only for a project still on the legacy shared HS256 secret |
+| `API_REQUIRE_USER` | `true`: a request without a valid user token is refused (401). Turn it on once the dashboard forwards the token |
+
+A token that is sent is always checked, even while `API_REQUIRE_USER` is off.
+
 ## Put it on Render (one time)
 
 1. **Database.** Apply the migrations (`bash deploy/remote.sh migrate --plan` then `migrate`): `0022_dashboard_gateway.sql`
