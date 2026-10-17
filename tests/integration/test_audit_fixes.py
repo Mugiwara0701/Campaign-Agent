@@ -63,14 +63,17 @@ def test_a_request_taken_over_by_another_worker_is_not_stored_twice(db, monkeypa
     def slow_then_taken_over(r, ws, svc):  # type: ignore[no-untyped-def]
         with db.transaction() as conn:
             conn.execute(
-                "update public.campaign_request set claimed_by = 'other-worker' where id = %s", (r.id,)
+                "update public.campaign_request set claimed_by = 'other-worker' where id = %s",
+                (r.id,),
             )
         return real(r, ws, svc)
 
     monkeypatch.setattr(manager, "handle", slow_then_taken_over)
     assert worker(db, COMPLETE_REPLY).run_once()
     row = request_row(db, req["id"])
-    assert row["status"] == "processing" and row["claimed_by"] == "other-worker"  # left to the new owner
+    assert (
+        row["status"] == "processing" and row["claimed_by"] == "other-worker"
+    )  # left to the new owner
     assert versions(db, cid) == []  # nothing stored by the worker that lost it
 
 

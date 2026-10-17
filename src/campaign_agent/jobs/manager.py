@@ -376,7 +376,9 @@ def process_next(db: Database, svc: Services, cfg: ManagerConfig) -> bool:
         outcome = handle(req, ws, svc)
         outcome = _store_or_refuse(db, req, ws, outcome, cfg.worker_id)
     except LeaseLostError:
-        log.warning("request taken over by another worker; this result was not stored", extra=context)
+        log.warning(
+            "request taken over by another worker; this result was not stored", extra=context
+        )
         return True
     except Exception as exc:
         log.exception("request crashed", extra=context)

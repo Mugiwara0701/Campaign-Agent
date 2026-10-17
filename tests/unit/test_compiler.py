@@ -96,7 +96,9 @@ def test_unsupported_requests_are_reported_not_dropped() -> None:
     # the countries are enforced by the Marketing Agent, and the searches lean that way too
     assert result.data["include_countries"] == ["US"]
     assert result.data["search"] == {"query_suffix": "US"}
-    countries = next(n for n in result.not_applied if n.request.startswith("audience.include_countries"))
+    countries = next(
+        n for n in result.not_applied if n.request.startswith("audience.include_countries")
+    )
     assert countries.kind == "partially_applied" and countries.reason.startswith("Applied")
     assert "cannot tell is kept" in countries.reason  # the one limit is said
 

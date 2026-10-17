@@ -209,7 +209,11 @@ def strict(gw: FakeGateway) -> TestClient:
 def test_the_approval_record_is_the_verified_person_not_what_the_body_says(
     strict: TestClient, gw: FakeGateway
 ) -> None:
-    body = {"request_type": "interpret", "requested_by": "someone-else@example.com", "idempotency_key": "k"}
+    body = {
+        "request_type": "interpret",
+        "requested_by": "someone-else@example.com",
+        "idempotency_key": "k",
+    }
     r = strict.post(
         f"/v1/campaigns/{CID}/requests", headers={**GOOD, "X-User-Token": _user_token()}, json=body
     )
@@ -235,7 +239,9 @@ def test_a_missing_or_bad_user_token_is_refused(
     }.get(token or "", token)
     headers = {**GOOD, **({"X-User-Token": value} if value else {})}
     body = {"request_type": "interpret", "requested_by": "x"}
-    assert strict.post(f"/v1/campaigns/{CID}/requests", headers=headers, json=body).status_code == 401
+    assert (
+        strict.post(f"/v1/campaigns/{CID}/requests", headers=headers, json=body).status_code == 401
+    )
     assert gw.sent == []
 
 
@@ -243,8 +249,14 @@ def test_only_an_admin_changes_a_campaign_or_resumes_but_anyone_may_pause(
     strict: TestClient, gw: FakeGateway
 ) -> None:
     employee = {**GOOD, "X-User-Token": _user_token(role="employee")}
-    body = {"request_type": "approve", "requested_by": "x", "payload": {"version": 1, "sha256": "a" * 64}}
-    assert strict.post(f"/v1/campaigns/{CID}/requests", headers=employee, json=body).status_code == 403
+    body = {
+        "request_type": "approve",
+        "requested_by": "x",
+        "payload": {"version": 1, "sha256": "a" * 64},
+    }
+    assert (
+        strict.post(f"/v1/campaigns/{CID}/requests", headers=employee, json=body).status_code == 403
+    )
     assert gw.sent == []
     pause = {"state": "paused", "requested_by": "x"}
     assert strict.post("/v1/ca/state", headers=employee, json=pause).status_code == 200
@@ -252,6 +264,8 @@ def test_only_an_admin_changes_a_campaign_or_resumes_but_anyone_may_pause(
     assert strict.post("/v1/ca/state", headers=employee, json=resume).status_code == 403
 
 
-def test_without_require_user_the_old_dashboard_still_works(client: TestClient, gw: FakeGateway) -> None:
+def test_without_require_user_the_old_dashboard_still_works(
+    client: TestClient, gw: FakeGateway
+) -> None:
     body = {"request_type": "interpret", "requested_by": "priya@example.com"}
     assert client.post(f"/v1/campaigns/{CID}/requests", headers=GOOD, json=body).status_code == 202

@@ -27,6 +27,8 @@ def make_router(gateway: Gateway, guard: Any, user_of: Any = lambda: None) -> AP
         running. With a verified user token: anyone signed in may pause (the safety brake), only an admin may resume."""
         if user is not None and body.state == "running" and not user.admin:
             raise HTTPException(status_code=403, detail="only an admin can resume the agent")
-        return gateway.set_ca_state(body.state, user.email if user is not None else body.requested_by)
+        return gateway.set_ca_state(
+            body.state, user.email if user is not None else body.requested_by
+        )
 
     return router

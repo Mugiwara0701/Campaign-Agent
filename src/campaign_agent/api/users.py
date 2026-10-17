@@ -56,14 +56,22 @@ class UserVerifier:
                 if not self._secret:
                     raise UserTokenError("HS256 token, but no JWT secret is configured")
                 claims = jwt.decode(
-                    token, self._secret, algorithms=["HS256"], audience="authenticated", options=options
+                    token,
+                    self._secret,
+                    algorithms=["HS256"],
+                    audience="authenticated",
+                    options=options,
                 )
             else:
                 if self._jwks is None:
                     raise UserTokenError("signed token, but no Supabase URL is configured")
                 key = self._jwks.get_signing_key_from_jwt(token).key
                 claims = jwt.decode(
-                    token, key, algorithms=ASYMMETRIC_ALGS, audience="authenticated", options=options
+                    token,
+                    key,
+                    algorithms=ASYMMETRIC_ALGS,
+                    audience="authenticated",
+                    options=options,
                 )
         except jwt.PyJWTError as exc:
             raise UserTokenError(f"invalid user token: {type(exc).__name__}") from exc

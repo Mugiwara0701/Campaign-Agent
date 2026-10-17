@@ -25,9 +25,13 @@ PYTHON = os.environ.get("REAL_MA_PYTHON", "")
 @pytest.fixture
 def real_ma() -> Downstream:
     if not CHECKOUT or not PYTHON:
-        pytest.skip("set REAL_MA_CHECKOUT and REAL_MA_PYTHON to check against the real Marketing Agent")
+        pytest.skip(
+            "set REAL_MA_CHECKOUT and REAL_MA_PYTHON to check against the real Marketing Agent"
+        )
     # No network isolation here: a CI machine may not allow network namespaces. The service always isolates.
-    return Downstream(checkout=Path(CHECKOUT), python=PYTHON, timeout_s=120, required=True, isolate=())
+    return Downstream(
+        checkout=Path(CHECKOUT), python=PYTHON, timeout_s=120, required=True, isolate=()
+    )
 
 
 def test_the_real_marketing_agent_accepts_a_compiled_campaign(real_ma: Downstream) -> None:

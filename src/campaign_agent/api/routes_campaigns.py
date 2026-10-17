@@ -13,7 +13,9 @@ def make_router(gateway: Gateway, guard: Any, user_of: Any = lambda: None) -> AP
 
     @router.post("/{campaign_id}/requests", status_code=202)
     def send(
-        campaign_id: UUID, body: RequestIn, user: User | None = Depends(user_of)  # noqa: B008
+        campaign_id: UUID,
+        body: RequestIn,
+        user: User | None = Depends(user_of),  # noqa: B008
     ) -> dict[str, Any]:
         """Send the Campaign Agent a request about a campaign: `interpret` (start), `answer`, `edit`, `suggestion`,
         `approve`, `discard`, `rollback` or `deactivate`. It is only recorded here; the Campaign Agent does the work, so

@@ -40,7 +40,9 @@ def create_app(
                 raise HTTPException(status_code=401, detail="missing user token")
             return None
         if users is None:
-            raise HTTPException(status_code=401, detail="user tokens are not set up on this gateway")
+            raise HTTPException(
+                status_code=401, detail="user tokens are not set up on this gateway"
+            )
         try:
             return users.verify(raw)
         except UserTokenError as exc:
