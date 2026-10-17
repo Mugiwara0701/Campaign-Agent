@@ -65,12 +65,8 @@ def hits(n: int) -> list[SearchHit]:
 
 def model_reply(**over: Any) -> str:
     base: dict[str, Any] = {
-        "company_types": [
-            {"text": "Makers of in-vehicle infotainment units", "pages": [1]}
-        ],
-        "buying_signals": [
-            {"text": "Moving a product to a new Android version", "pages": [2]}
-        ],
+        "company_types": [{"text": "Makers of in-vehicle infotainment units", "pages": [1]}],
+        "buying_signals": [{"text": "Moving a product to a new Android version", "pages": [2]}],
         "key_terms": [{"text": "digital cockpit", "pages": [1]}],
         "not_confirmed": ["typical project budgets"],
     }
@@ -122,11 +118,7 @@ def test_a_brief_with_sources_that_were_read() -> None:
 
 
 def test_a_statement_whose_source_was_not_read_is_dropped_and_reported() -> None:
-    reply = model_reply(
-        key_terms=[
-            {"text": "cockpit domain controller", "pages": [9]}
-        ]
-    )
+    reply = model_reply(key_terms=[{"text": "cockpit domain controller", "pages": [9]}])
     brief = writer(SpySearch(hits(4)), SpyFetcher(), reply).write(IR)
     assert brief.key_terms == () and brief.status == "partial"
     assert "no source found for key terms" in brief.not_confirmed
@@ -277,4 +269,7 @@ def test_pages_are_cited_by_number_and_numbers_become_the_pages_urls() -> None:
     assert schema["items"]["maximum"] == 2
     reply = model_reply(company_types=[{"text": "Makers of cockpit units", "pages": [2, 1, 2, 7]}])
     brief = writer(SpySearch(hits(4)), SpyFetcher(), reply).write(IR)
-    assert brief.company_types[0].sources == (URL1, URL0)  # in the model's order, once each; 7 is ignored
+    assert brief.company_types[0].sources == (
+        URL1,
+        URL0,
+    )  # in the model's order, once each; 7 is ignored

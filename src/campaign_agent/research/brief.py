@@ -327,7 +327,9 @@ class BriefWriter:
             items: list[BriefItem] = []
             for item in getattr(reply, section):
                 text = " ".join(item.text.split())
-                sources = tuple(dict.fromkeys(urls[n - 1] for n in item.pages if 1 <= n <= len(urls)))
+                sources = tuple(
+                    dict.fromkeys(urls[n - 1] for n in item.pages if 1 <= n <= len(urls))
+                )
                 if not acceptable(text):
                     notes.append(f"dropped:{section}:not_plain")
                 elif not sources:
