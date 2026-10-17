@@ -94,16 +94,17 @@ the target customers look like, each statement with the pages it comes from. It 
 
 How it is made: subjects from the campaign's own terms (product + technology, industry + technology) → fixed templates
 ("... product development", "... applications", "... engineering challenges", "... explained") → the same query policy as
-above (nothing that seeks companies, people or sellers) → our SearXNG → at most **4 searches and 6 pages**, 2 per query →
-one model call → code checks. A statement is dropped unless it is at most 25 words, has no web or email address and no
+above (nothing that seeks companies, people or sellers) → our SearXNG → at most **4 searches and 4 pages**, 2 per query, the first 1,500 characters of each → one model call (pages cited by
+number, at most 3 short items per part, a 1,000-token answer) → code checks. A statement is dropped unless it is at most 25 words, has no web or email address and no
 legal-form name (Inc, Ltd, GmbH ...), and every source is a page that was fetched. A part left empty is listed under
 `not_confirmed`.
 
 One brief per version: it is written when a version is frozen and kept, unchanged, while that version is on screen (an
 approval, a refused request or a repeat does not search again). A new version gets a new brief. Any failure (search
 down, no page readable, a model that does not answer or answers nonsense, a bug) gives an `unavailable` brief that says
-why, and the proposal goes on as before. On the CA machine's CPU model it adds a few minutes to the request that
-produces the version. `RESEARCH_BRIEF=false` keeps research suggestions but turns the brief off.
+why, and the proposal goes on as before. Measured on the CA machine (CPU-only `qwen3.5:9b`, 2026-10-17): the brief's model call takes about 5-6 minutes; a
+whole new proposal (reading the request, then the brief) took 9 minutes. `RESEARCH_BRIEF_TIMEOUT_S` (default 900) is
+the brief's own time limit. `RESEARCH_BRIEF=false` keeps research suggestions but turns the brief off.
 
 **Known limits:** the check for company names catches legal-form names and addresses, not a bare brand word; the model
 is told not to name companies, and the reviewer sees the sources. The brief describes; it does not prove a market.
