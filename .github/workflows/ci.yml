@@ -150,21 +150,22 @@ jobs:
           python -m venv .venv
           .venv/bin/pip install -r requirements.txt
       - run: pytest tests/e2e/test_real_ma.py tests/e2e/test_two_agents.py -v --junitxml=two-agents.xml
+        env:
+          REAL_MA_CHECKOUT: ${{ github.workspace }}/marketing-agent
+          REAL_MA_PYTHON: ${{ github.workspace }}/marketing-agent/.venv/bin/python
       # These tests skip themselves when their setup is missing: here a skip is a failure, and the counts are shown.
       - name: Nothing skipped
         if: always()
         run: |
           python - <<'PY'
           import xml.etree.ElementTree as ET
-          suite = ET.parse("two-agents.xml").getroot().find("testsuite") or ET.parse("two-agents.xml").getroot()
+          root = ET.parse("two-agents.xml").getroot()
+          suite = root if root.tag == "testsuite" else root.find("testsuite")
           n, s, f, e = (int(suite.get(k, 0)) for k in ("tests", "skipped", "failures", "errors"))
           names = [c.get("name") for c in suite.iter("testcase")]
           print(f"::notice title=two-agent tests::{n} run, {s} skipped, {f} failed, {e} errors: {', '.join(names)}")
           raise SystemExit(1 if s or f or e or not n else 0)
           PY
-        env:
-          REAL_MA_CHECKOUT: ${{ github.workspace }}/marketing-agent
-          REAL_MA_PYTHON: ${{ github.workspace }}/marketing-agent/.venv/bin/python
 
   scripts:
     name: Shell scripts
