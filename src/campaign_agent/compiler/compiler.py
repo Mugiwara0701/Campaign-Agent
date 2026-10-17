@@ -71,6 +71,7 @@ _EXCLUSIONS = {
     "exclusions.countries": ("", "exclude_countries"),
     "exclusions.tlds": ("", "exclude_tlds"),
     "audience.include_countries": ("", "include_countries"),
+    "contacts.preferred_roles": ("", "preferred_roles"),
 }
 _MAPPING = {**_AUDIENCE, **_QUALIFICATION, **_LIMITS, **_EXCLUSIONS}
 
@@ -82,10 +83,6 @@ _PROPOSALS = {
     "audience.employee_max": (
         "The Marketing Agent does not extract company size.",
         "targeting.employee_range",
-    ),
-    "contacts.preferred_roles": (
-        "Contact role priority is fixed in the Marketing Agent code.",
-        "contacts.preferred_roles",
     ),
     "audience.signals": (
         "No contract key for custom signals; hiring and RFP signals are set by "
@@ -167,8 +164,9 @@ def compile_overlay(ir: CampaignIR) -> CompiledOverlay:
     for key in EXCLUDE_KEYS:
         if key in top:
             data[key] = top[key]
-    if "include_countries" in top:
-        data["include_countries"] = top["include_countries"]
+    for key in ("include_countries", "preferred_roles"):
+        if key in top:
+            data[key] = top[key]
     hint = _country_hint(ir, sections["search"])
     if hint:
         sections["search"]["query_suffix"] = hint
@@ -224,8 +222,9 @@ def merge_onto_base(overlay: Mapping[str, Any], base: LeadgenFile) -> dict[str, 
             effective[section][key] = list(value) if isinstance(value, list) else value
     for key in EXCLUDE_KEYS:
         effective[key] = _union(effective[key], list(overlay.get(key) or []))
-    if overlay.get("include_countries"):
-        effective["include_countries"] = list(overlay["include_countries"])
+    for key in ("include_countries", "preferred_roles"):
+        if overlay.get(key):
+            effective[key] = list(overlay[key])
     return effective
 
 

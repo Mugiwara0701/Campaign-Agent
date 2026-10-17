@@ -88,11 +88,11 @@ def test_unsupported_requests_are_reported_not_dropped() -> None:
     )
     result = compile_overlay(ir)
     proposals = {n.proposal for n in result.not_applied}
-    assert {"targeting.employee_range", "contacts.preferred_roles"} <= proposals
-    assert "targeting.include_countries" not in proposals  # countries are applied now
-    text = str(result.data)
-    assert "cto" not in text
-    assert "employee" not in text
+    assert "targeting.employee_range" in proposals
+    # countries and contact roles are applied now
+    assert not {"targeting.include_countries", "contacts.preferred_roles"} & proposals
+    assert result.data["preferred_roles"] == ["cto"]
+    assert "employee" not in str(result.data)
     # the countries are enforced by the Marketing Agent, and the searches lean that way too
     assert result.data["include_countries"] == ["US"]
     assert result.data["search"] == {"query_suffix": "US"}

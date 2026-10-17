@@ -42,6 +42,7 @@ def test_the_real_marketing_agent_accepts_a_compiled_campaign(real_ma: Downstrea
             ("audience.technologies", ["Android Automotive"]),
             ("audience.include_countries", ["Germany", "Austria"]),
             ("exclusions.countries", ["France"]),
+            ("contacts.preferred_roles", ["cto", "procurement"]),
             name="Real MA contract",
         )
     )
