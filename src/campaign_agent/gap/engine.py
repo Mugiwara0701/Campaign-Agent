@@ -16,6 +16,7 @@ from typing import Any
 from campaign_agent.contract.field_metadata import defaults
 from campaign_agent.contract.model import rule_violations
 from campaign_agent.contract.supplier_words import supplier_word
+from campaign_agent.contract.vocabularies import base_config
 from campaign_agent.ir.models import CampaignIR
 from campaign_agent.ir.registry import REGISTRY, get_value
 from campaign_agent.merger.patch_merger import Reason as MergeReason
@@ -42,6 +43,7 @@ class Reason(StrEnum):
     PAGES_STARVED = "pages_starved"
     EMPLOYEE_RANGE = "employee_range"
     TARGET_EXCLUDED = "target_excluded"
+    COUNTRY_NOT_PITCHED = "country_not_pitched"
     SUPPLIER_WORDING = "supplier_wording"
     VALUE_UNCLEAR = "value_unclear"
     NO_INDUSTRY = "no_industry"
@@ -146,6 +148,23 @@ def _contradictions(ir: CampaignIR) -> list[Finding]:
                     Finding(Kind.CONFLICT, target, Reason.TARGET_EXCLUDED, _norm(item), detail)
                 )
     return out
+
+
+def _not_pitched(ir: CampaignIR) -> list[Finding]:
+    """A wanted country that the base config never pitches (a business decision a campaign cannot undo).
+    Asked at once, so the user is not left with a failed check and no way out at the end."""
+    excluded = {_norm(x) for x in base_config().exclude_countries}
+    return [
+        Finding(
+            Kind.CONFLICT,
+            "audience.include_countries",
+            Reason.COUNTRY_NOT_PITCHED,
+            _norm(country),
+            {"item": country, "quote": _quote(ir, "audience.include_countries")},
+        )
+        for country in get_value(ir, "audience.include_countries") or []
+        if _norm(country) in excluded
+    ]
 
 
 # --- target drift ---
@@ -282,6 +301,7 @@ def analyze(ir: CampaignIR, rejected: Sequence[Rejected] = ()) -> list[Finding]:
     found = [
         *_conflicts(ir),
         *_contradictions(ir),
+        *_not_pitched(ir),
         *_drift(ir),
         *_unclear(rejected),
         *_audience(ir),

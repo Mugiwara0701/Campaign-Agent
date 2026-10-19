@@ -32,6 +32,8 @@ def create_app(
         if not token_ok(bearer(request.headers.get("authorization")), token):
             raise HTTPException(status_code=401, detail="missing or wrong token")
 
+    warned: list[bool] = []
+
     def user_of(request: Request) -> User | None:
         """The verified person, or None when no user token was sent and none is required."""
         raw = (request.headers.get(USER_HEADER) or "").strip()
@@ -40,9 +42,13 @@ def create_app(
                 raise HTTPException(status_code=401, detail="missing user token")
             return None
         if users is None:
-            raise HTTPException(
-                status_code=401, detail="user tokens are not set up on this gateway"
-            )
+            # Not set up yet (no API_SUPABASE_URL): the dashboard may already forward its users' tokens, so the token is
+            # ignored, as before user tokens existed, and the request goes on with `requested_by`. Never a refusal: that
+            # stopped every dashboard request on 2026-10-17. With API_REQUIRE_USER the gateway refuses to start instead.
+            if not warned:
+                log.warning("a user token arrived but API_SUPABASE_URL is not set: it is ignored")
+                warned.append(True)
+            return None
         try:
             return users.verify(raw)
         except UserTokenError as exc:
