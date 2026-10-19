@@ -190,7 +190,8 @@ def test_decision_makers_without_named_roles_are_dropped_without_a_question() ->
     reply = json.dumps({"ops": [products, *roles], "unsupported": [], "research_needs": []})
     result = Extractor(StubAdapter([reply]), sleep=lambda _s: None).run(text)
     assert result.patch is not None
-    merged = merge_patch(new_ir("c1"), result.patch, TurnContext(1, Source.EXTRACTION, re    plan = plan_turn(merged.ir, conv(), rejected=merged.rejected, turn=1)
+    merged = merge_patch(new_ir("c1"), result.patch, TurnContext(1, Source.EXTRACTION, result.text))
+    plan = plan_turn(merged.ir, conv(), rejected=merged.rejected, turn=1)
     assert not [q for q in plan.new_questions if q.key.startswith("contacts.preferred_roles")]
     assert plan.ir.contacts.preferred_roles == []
 
