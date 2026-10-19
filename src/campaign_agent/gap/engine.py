@@ -208,20 +208,24 @@ def _drift(ir: CampaignIR) -> list[Finding]:
 # --- values that were rejected ---
 
 # A value that did not match its quote is usually a model slip, not a request. These are fields
-# people name directly ("US only", "decision makers", "500 to 5,000 employees"), so ask for them.
+# people name directly ("US only", "500 to 5,000 employees"), so ask for them.
 _ASK_WHEN_UNGROUNDED = {
-    "contacts.preferred_roles",
     "audience.employee_min",
     "audience.employee_max",
     "audience.include_countries",
 }
 
 
+# Roles only change who at a company is contacted first; without them the Marketing Agent uses its own
+# order. A role that could not be read is dropped, not asked about: the question held campaigns up.
+_NEVER_ASK = {"contacts.preferred_roles"}
+
+
 def _unclear(rejected: Sequence[Rejected]) -> list[Finding]:
     out: dict[str, Finding] = {}
     for r in rejected:
         spec = REGISTRY.get(r.path)
-        if spec is None or spec.mapping == "not_emitted":
+        if spec is None or spec.mapping == "not_emitted" or r.path in _NEVER_ASK:
             continue
         asks = r.reason is MergeReason.INVALID_VALUE or (
             r.reason is MergeReason.VALUE_NOT_IN_QUOTE and r.path in _ASK_WHEN_UNGROUNDED

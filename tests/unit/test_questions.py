@@ -330,27 +330,6 @@ def test_a_supplier_word_in_the_query_suffix_is_cleared_or_replaced() -> None:
 # --- unclear values --------------------------------------------------------------------------------------------------------
 
 
-def test_the_roles_question_offers_the_controlled_vocabulary() -> None:
-    from campaign_agent.gap.engine import Finding, Kind, Reason
-
-    ir = ir_with(("audience.products", ["k"]))
-    f = Finding(Kind.UNCLEAR, "contacts.preferred_roles", Reason.VALUE_UNCLEAR)
-    q = build_question(f, ir)
-    assert q.multi
-    assert not q.allow_text
-    assert [c.label for c in q.choices] == [
-        "cto",
-        "vp_engineering",
-        "engineering_director",
-        "engineering_manager",
-        "founder",
-        "procurement",
-    ]
-    conv = register(ConversationState(), [q], 1)
-    out = answer_question(ir, conv, Answer(question_id=q.id, value=["c0", "c1"]), turn=2)
-    assert out.ir.contacts.preferred_roles == ["cto", "vp_engineering"]
-
-
 def test_a_numeric_text_answer_becomes_a_number() -> None:
     from campaign_agent.gap.engine import Finding, Kind, Reason
 

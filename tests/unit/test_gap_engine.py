@@ -188,12 +188,11 @@ def test_ordinary_words_are_not_drift() -> None:
 # --- rejected values ----------------------------------------------------------------------------------------------------
 
 
-def test_roles_the_model_could_not_ground_become_one_question_target() -> None:
-    """The real-model case: 'find the right decision makers' produced six role guesses."""
+def test_roles_the_model_could_not_read_are_dropped_without_a_question() -> None:
+    """'find the right decision makers' produced six role guesses; roles only set who is contacted first."""
     rej = [rejected("contacts.preferred_roles", MergeReason.VALUE_NOT_IN_QUOTE)] * 6
-    found = analyze(ir_with(("audience.products", ["kiosk"])), rej)
-    assert reasons(found) == [Reason.VALUE_UNCLEAR]
-    assert found[0].path == "contacts.preferred_roles"
+    rej += [rejected("contacts.preferred_roles", MergeReason.INVALID_VALUE)]
+    assert analyze(ir_with(("audience.products", ["kiosk"])), rej) == []
 
 
 def test_an_out_of_range_value_is_asked_about_for_any_field() -> None:
@@ -272,7 +271,7 @@ def test_findings_come_most_urgent_first() -> None:
     )
     kinds = [
         f.kind
-        for f in analyze(ir, [rejected("contacts.preferred_roles", MergeReason.VALUE_NOT_IN_QUOTE)])
+        for f in analyze(ir, [rejected("audience.employee_min", MergeReason.VALUE_NOT_IN_QUOTE)])
     ]
     assert kinds == [Kind.CONFLICT, Kind.DRIFT, Kind.UNCLEAR, Kind.PREFERENCE]
 
