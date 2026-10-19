@@ -207,7 +207,9 @@ def _country_not_pitched(f: Finding, ir: CampaignIR) -> Question:
         f"“{d['item']}” is on the company's list of countries that are never pitched, so the Marketing Agent "
         f"would reject every company there. Remove it, or name another country. {after}",
         choices=_choices(("Remove it", Effect(ops=(_op_remove(path, d["item"]),)))),
-        text_effect=Effect(ops=(_op_remove(path, d["item"]), PatchOp(path=path, op="add", value=PLACEHOLDER))),
+        text_effect=Effect(
+            ops=(_op_remove(path, d["item"]), PatchOp(path=path, op="add", value=PLACEHOLDER))
+        ),
         skippable=False,
     )
 
