@@ -282,3 +282,29 @@ def test_findings_are_deterministic() -> None:
         ("audience.industries", ["automotive"]), ("audience.technologies", ["Android"])
     )
     assert [f.key for f in analyze(ir)] == [f.key for f in analyze(ir)]
+
+
+def test_a_country_the_base_never_pitches_is_asked_about_at_once() -> None:
+    """'Find companies in Germany and Austria': Germany is on the base's do-not-pitch list, so the campaign
+    could never pass its checks. The user is asked now, not left with a failed check at the end."""
+    found = analyze(
+        ir_with(
+            ("audience.include_countries", ["Germany", "Austria"]),
+            ("audience.products", ["digital cockpit"]),
+            ("audience.capabilities_needed", ["embedded Linux"]),
+        )
+    )
+    pitched = [f for f in found if f.reason is Reason.COUNTRY_NOT_PITCHED]
+    assert [f.detail["item"] for f in pitched] == ["Germany"]
+    assert pitched[0].kind is Kind.CONFLICT
+    assert found[0].reason is Reason.COUNTRY_NOT_PITCHED  # conflicts come first
+
+
+def test_countries_the_base_pitches_raise_nothing() -> None:
+    found = analyze(
+        ir_with(
+            ("audience.include_countries", ["Austria", "Switzerland"]),
+            ("audience.products", ["digital cockpit"]),
+        )
+    )
+    assert Reason.COUNTRY_NOT_PITCHED not in reasons(found)

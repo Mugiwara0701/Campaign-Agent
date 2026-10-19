@@ -20,7 +20,7 @@ from campaign_agent.gap.engine import PRIORITY, Finding, Kind, Reason
 from campaign_agent.guard.input_guard import check_input
 from campaign_agent.ir.models import CampaignIR, Role
 from campaign_agent.ir.patch import IRPatch, PatchOp, UnsupportedClaim
-from campaign_agent.ir.registry import REGISTRY
+from campaign_agent.ir.registry import REGISTRY, get_value
 from campaign_agent.merger.patch_merger import MergeResult, Source, TurnContext, merge_patch
 from campaign_agent.merger.patch_merger import Reason as MergeReason
 from campaign_agent.questions.models import (
@@ -193,6 +193,25 @@ def _target_excluded(f: Finding, ir: CampaignIR) -> Question:
     )
 
 
+def _country_not_pitched(f: Finding, ir: CampaignIR) -> Question:
+    d = f.detail
+    path = "audience.include_countries"
+    others = [c for c in get_value(ir, path) or [] if c != d["item"]]
+    after = (
+        f"The campaign then targets {_join(others)}."
+        if others
+        else "With no country left, any country that is not excluded is searched."
+    )
+    return _q(
+        Kind.CONFLICT,
+        f"“{d['item']}” is on the company's list of countries that are never pitched, so the Marketing Agent "
+        f"would reject every company there. Remove it, or name another country. {after}",
+        choices=_choices(("Remove it", Effect(ops=(_op_remove(path, d["item"]),)))),
+        text_effect=Effect(ops=(_op_remove(path, d["item"]), PatchOp(path=path, op="add", value=PLACEHOLDER))),
+        skippable=False,
+    )
+
+
 def _supplier_wording(f: Finding, ir: CampaignIR) -> Question:
     item, word, path = f.detail["item"], f.detail["word"], f.path
     scalar = REGISTRY[path].kind == "scalar"
@@ -304,6 +323,7 @@ _MAKERS = {
     Reason.PAGES_STARVED: _pages_starved,
     Reason.EMPLOYEE_RANGE: _employee_range,
     Reason.TARGET_EXCLUDED: _target_excluded,
+    Reason.COUNTRY_NOT_PITCHED: _country_not_pitched,
     Reason.SUPPLIER_WORDING: _supplier_wording,
     Reason.VALUE_UNCLEAR: _value_unclear,
     Reason.NO_INDUSTRY: _no_industry,

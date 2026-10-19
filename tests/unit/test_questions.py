@@ -420,3 +420,19 @@ def test_the_answer_text_limit_and_guard_agree() -> None:
     assert Answer(question_id="q", value="x" * 500).value == "x" * 500
     with pytest.raises(ValueError, match="at most 500"):
         Answer(question_id="q", value="x" * 501)
+
+
+def test_a_country_that_is_never_pitched_can_be_removed_or_replaced() -> None:
+    ir = ir_with(
+        ("audience.include_countries", ["Germany", "Austria"]),
+        ("audience.products", ["digital cockpit"]),
+        ("audience.capabilities_needed", ["embedded Linux"]),
+    )
+    qs, conv = open_questions(ir)
+    q = next(q for q in qs if "never pitched" in q.text)
+    assert "Germany" in q.text and "Austria" in q.text
+    assert not q.skippable
+    removed = answer_question(ir, conv, Answer(question_id=q.id, value="c0"), turn=2)
+    assert removed.ir.audience.include_countries == ["Austria"]
+    replaced = answer_question(ir, conv, Answer(question_id=q.id, value="Switzerland"), turn=2)
+    assert replaced.ir.audience.include_countries == ["Austria", "Switzerland"]
