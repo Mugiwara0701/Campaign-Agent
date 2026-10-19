@@ -11,14 +11,14 @@ Rules:
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any, get_args
+from typing import Any
 
 from campaign_agent.contract.vocabularies import base_config
 from campaign_agent.conversation.state import MAX_OPEN, AskedQuestion, ConversationState
 from campaign_agent.extractor.prompts import DESCRIPTIONS
 from campaign_agent.gap.engine import PRIORITY, Finding, Kind, Reason
 from campaign_agent.guard.input_guard import check_input
-from campaign_agent.ir.models import CampaignIR, Role
+from campaign_agent.ir.models import CampaignIR
 from campaign_agent.ir.patch import IRPatch, PatchOp, UnsupportedClaim
 from campaign_agent.ir.registry import REGISTRY, get_value
 from campaign_agent.merger.patch_merger import MergeResult, Source, TurnContext, merge_patch
@@ -233,14 +233,6 @@ def _value_unclear(f: Finding, ir: CampaignIR) -> Question:
     path = f.path
     what = DESCRIPTIONS[path]
     text = f"I could not read a clear value for: {what}. What should it be?"
-    if path == "contacts.preferred_roles":
-        roles = list(get_args(Role))
-        return _q(
-            Kind.UNCLEAR,
-            "Which decision-maker roles should we look for?",
-            choices=_from_list(path, roles),
-            multi=True,
-        )
     op = PatchOp(path=path, op="add" if REGISTRY[path].kind == "list" else "set", value=PLACEHOLDER)
     return _q(Kind.UNCLEAR, text, text_effect=Effect(ops=(op,)))
 

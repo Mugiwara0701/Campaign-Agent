@@ -170,7 +170,7 @@ def test_never_more_than_three_open_across_turns() -> None:
 # --- the real-model case: roles that could not be grounded ---------------------------------------------------------------------------
 
 
-def test_decision_makers_without_named_roles_becomes_a_question() -> None:
+def test_decision_makers_without_named_roles_are_dropped_without_a_question() -> None:
     text = "Find US companies building automotive infotainment on Android and find the right decision makers"
     roles = [
         {
@@ -190,17 +190,9 @@ def test_decision_makers_without_named_roles_becomes_a_question() -> None:
     reply = json.dumps({"ops": [products, *roles], "unsupported": [], "research_needs": []})
     result = Extractor(StubAdapter([reply]), sleep=lambda _s: None).run(text)
     assert result.patch is not None
-    merged = merge_patch(new_ir("c1"), result.patch, TurnContext(1, Source.EXTRACTION, result.text))
-    plan = plan_turn(merged.ir, conv(), rejected=merged.rejected, turn=1)
-    assert plan.event is Event.GAPS_FOUND
-    question = plan.new_questions[0]
-    assert question.key.startswith("contacts.preferred_roles|value_unclear")
-    assert question.text == "Which decision-maker roles should we look for?"
-    out = answer_question(
-        plan.ir, plan.conv, Answer(question_id=question.id, value=["c0", "c5"]), turn=2
-    )
-    assert out.ir.contacts.preferred_roles == ["cto", "procurement"]
-    assert out.ir.provenance["contacts.preferred_roles"].status is Status.CONFIRMED
+    merged = merge_patch(new_ir("c1"), result.patch, TurnContext(1, Source.EXTRACTION, re    plan = plan_turn(merged.ir, conv(), rejected=merged.rejected, turn=1)
+    assert not [q for q in plan.new_questions if q.key.startswith("contacts.preferred_roles")]
+    assert plan.ir.contacts.preferred_roles == []
 
 
 @pytest.mark.parametrize("unscoped", ["we prefer small companies", "we usually avoid defence work"])
